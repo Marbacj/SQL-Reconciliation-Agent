@@ -180,20 +180,23 @@ class OpenAIAdapter(BaseLLMAdapter):
             usage = {}
             
             for chunk in response:
-                if chunk.choices and len(chunk.choices) > 0:
-                    delta = chunk.choices[0].delta
-                    
-                    # 提取内容
-                    if delta.content:
-                        collected_content.append(delta.content)
-                        yield delta.content
-                    
-                    # Thinking model的推理过程
-                    if self._is_thinking_model(self.model):
-                        if hasattr(delta, 'reasoning_content') and delta.reasoning_content:
-                            if reasoning_content is None:
-                                reasoning_content = ""
-                            reasoning_content += delta.reasoning_content
+                choices = getattr(chunk, "choices", None)
+                if choices:
+                    delta = getattr(choices[0], "delta", None)
+                    if delta is not None:
+                        # 提取内容
+                        content = getattr(delta, "content", None)
+                        if content:
+                            collected_content.append(content)
+                            yield content
+
+                        # Thinking model的推理过程
+                        if self._is_thinking_model(self.model):
+                            reasoning_delta = getattr(delta, "reasoning_content", None)
+                            if reasoning_delta:
+                                if reasoning_content is None:
+                                    reasoning_content = ""
+                                reasoning_content += reasoning_delta
 
                 # 提取usage（流式最后一个chunk可能包含）
                 if hasattr(chunk, 'usage') and chunk.usage:
@@ -236,20 +239,23 @@ class OpenAIAdapter(BaseLLMAdapter):
             usage = {}
 
             async for chunk in response:
-                if chunk.choices and len(chunk.choices) > 0:
-                    delta = chunk.choices[0].delta
+                choices = getattr(chunk, "choices", None)
+                if choices:
+                    delta = getattr(choices[0], "delta", None)
+                    if delta is not None:
+                        # 提取内容
+                        content = getattr(delta, "content", None)
+                        if content:
+                            collected_content.append(content)
+                            yield content
 
-                    # 提取内容
-                    if delta.content:
-                        collected_content.append(delta.content)
-                        yield delta.content
-
-                    # Thinking model的推理过程
-                    if self._is_thinking_model(self.model):
-                        if hasattr(delta, 'reasoning_content') and delta.reasoning_content:
-                            if reasoning_content is None:
-                                reasoning_content = ""
-                            reasoning_content += delta.reasoning_content
+                        # Thinking model的推理过程
+                        if self._is_thinking_model(self.model):
+                            reasoning_delta = getattr(delta, "reasoning_content", None)
+                            if reasoning_delta:
+                                if reasoning_content is None:
+                                    reasoning_content = ""
+                                reasoning_content += reasoning_delta
 
                 # 提取usage（流式最后一个chunk可能包含）
                 if hasattr(chunk, 'usage') and chunk.usage:
@@ -351,10 +357,75 @@ class AnthropicAdapter(BaseLLMAdapter):
         for msg in messages:
             if msg["role"] == "system":
                 system_content = msg["content"]
+            elif msg["role"] == "assistant" and msg.get("tool_calls"):
+                content_blocks = []
+                if msg.get("content"):
+                    content_blocks.append({"type": "text", "text": msg["content"]})
+
+                for tool_call in msg["tool_calls"]:
+                    function = tool_call.get("function", {})
+                    arguments = function.get("arguments", {})
+                    if isinstance(arguments, str):
+                        try:
+                            arguments = json.loads(arguments)
+                        except json.JSONDecodeError:
+                            arguments = {}
+
+                    content_blocks.append({
+                        "type": "tool_use",
+                        "id": tool_call.get("id"),
+                        "name": function.get("name"),
+                        "input": arguments,
+                    })
+
+                converted_messages.append({
+                    "role": "assistant",
+                    "content": content_blocks,
+                })
+            elif msg["role"] == "tool":
+                converted_messages.append({
+                    "role": "user",
+                    "content": [{
+                        "type": "tool_result",
+                        "tool_use_id": msg.get("tool_call_id"),
+                        "content": msg.get("content", ""),
+                    }],
+                })
             else:
                 converted_messages.append(msg)
 
         return system_content, converted_messages
+
+    def _convert_tools(self, tools: List[Dict]) -> List[Dict]:
+        """将统一的 OpenAI 风格工具 schema 转换为 Anthropic 工具 schema"""
+        converted_tools = []
+        for tool in tools:
+            if tool.get("type") == "function" and "function" in tool:
+                function = tool["function"]
+                converted_tools.append({
+                    "name": function["name"],
+                    "description": function.get("description", ""),
+                    "input_schema": function.get("parameters", {
+                        "type": "object",
+                        "properties": {},
+                    }),
+                })
+            else:
+                converted_tools.append(tool)
+
+        return converted_tools
+
+    def _convert_tool_choice(self, tool_choice: Any) -> Optional[Dict]:
+        """将统一的 tool_choice 转换为 Anthropic 格式"""
+        if tool_choice in (None, "auto", "none"):
+            return None
+        if tool_choice == "required":
+            return {"type": "any"}
+        if isinstance(tool_choice, dict):
+            function = tool_choice.get("function")
+            if function and function.get("name"):
+                return {"type": "tool", "name": function["name"]}
+        return tool_choice
 
     def invoke(self, messages: List[Dict], **kwargs) -> LLMResponse:
         """非流式调用"""
@@ -456,18 +527,22 @@ class AnthropicAdapter(BaseLLMAdapter):
             self._client = self.create_client()
 
         system_content, converted_messages = self._convert_messages(messages)
+        converted_tools = self._convert_tools(tools)
+        tool_choice = self._convert_tool_choice(kwargs.pop("tool_choice", None))
 
         start_time = time.time()
         try:
             request_params = {
                 "model": self.model,
                 "messages": converted_messages,
-                "tools": tools,
+                "tools": converted_tools,
                 "max_tokens": kwargs.pop("max_tokens", 4096),
                 **kwargs
             }
             if system_content:
                 request_params["system"] = system_content
+            if tool_choice:
+                request_params["tool_choice"] = tool_choice
 
             response = self._client.messages.create(**request_params)
             latency_ms = int((time.time() - start_time) * 1000)
@@ -523,21 +598,86 @@ class GeminiAdapter(BaseLLMAdapter):
 
     def _convert_messages(self, messages: List[Dict]) -> tuple[Optional[str], List[Dict]]:
         """转换消息格式"""
+        from google.genai import types as genai_types
+
         system_instruction = None
         converted_messages = []
+        tool_call_names = {}
 
         for msg in messages:
             if msg["role"] == "system":
                 system_instruction = msg["content"]
+            elif msg["role"] == "assistant" and msg.get("tool_calls"):
+                parts = []
+                if msg.get("content"):
+                    parts.append(genai_types.Part.from_text(text=msg["content"]))
+
+                for tool_call in msg["tool_calls"]:
+                    function = tool_call.get("function", {})
+                    arguments = function.get("arguments", {})
+                    if isinstance(arguments, str):
+                        try:
+                            arguments = json.loads(arguments)
+                        except json.JSONDecodeError:
+                            arguments = {}
+
+                    tool_name = function.get("name", "")
+                    tool_call_id = tool_call.get("id")
+                    if tool_call_id and tool_name:
+                        tool_call_names[tool_call_id] = tool_name
+
+                    parts.append(genai_types.Part.from_function_call(
+                        name=tool_name,
+                        args=arguments,
+                    ))
+
+                converted_messages.append(genai_types.Content(
+                    role="model",
+                    parts=parts,
+                ))
+            elif msg["role"] == "tool":
+                tool_name = tool_call_names.get(msg.get("tool_call_id"), "tool_result")
+                converted_messages.append(genai_types.Content(
+                    role="tool",
+                    parts=[genai_types.Part.from_function_response(
+                        name=tool_name,
+                        response={"result": msg.get("content", "")},
+                    )],
+                ))
             else:
                 # Gemini使用 "user" 和 "model" 作为角色
                 role = "model" if msg["role"] == "assistant" else "user"
-                converted_messages.append({
-                    "role": role,
-                    "parts": [{"text": msg["content"]}]
-                })
+                converted_messages.append(genai_types.Content(
+                    role=role,
+                    parts=[genai_types.Part.from_text(text=msg["content"] or "")],
+                ))
 
         return system_instruction, converted_messages
+
+    def _convert_tool_choice(self, tool_choice: Any) -> Optional[Any]:
+        """将统一的 tool_choice 转换为 Gemini 工具配置"""
+        from google.genai import types as genai_types
+
+        if tool_choice in (None, "auto"):
+            return None
+        if tool_choice == "none":
+            return genai_types.ToolConfig(
+                function_calling_config=genai_types.FunctionCallingConfig(mode="NONE")
+            )
+        if tool_choice == "required":
+            return genai_types.ToolConfig(
+                function_calling_config=genai_types.FunctionCallingConfig(mode="ANY")
+            )
+        if isinstance(tool_choice, dict):
+            function = tool_choice.get("function")
+            if function and function.get("name"):
+                return genai_types.ToolConfig(
+                    function_calling_config=genai_types.FunctionCallingConfig(
+                        mode="ANY",
+                        allowed_function_names=[function["name"]],
+                    )
+                )
+        return tool_choice
 
     def invoke(self, messages: List[Dict], **kwargs) -> LLMResponse:
         """非流式调用"""
@@ -648,6 +788,7 @@ class GeminiAdapter(BaseLLMAdapter):
         from google.genai import types as genai_types
 
         system_instruction, converted_messages = self._convert_messages(messages)
+        tool_choice = self._convert_tool_choice(kwargs.pop("tool_choice", None))
 
         start_time = time.time()
         try:
@@ -660,15 +801,21 @@ class GeminiAdapter(BaseLLMAdapter):
                         genai_types.FunctionDeclaration(
                             name=func["name"],
                             description=func.get("description", ""),
-                            parameters=func.get("parameters", {})
+                            parameters_json_schema=func.get("parameters", {})
                         )
                     )
 
             config_params = {}
+            if "temperature" in kwargs:
+                config_params["temperature"] = kwargs.pop("temperature")
+            if "max_tokens" in kwargs:
+                config_params["max_output_tokens"] = kwargs.pop("max_tokens")
             if gemini_tools:
                 config_params["tools"] = [genai_types.Tool(function_declarations=gemini_tools)]
             if system_instruction:
                 config_params["system_instruction"] = system_instruction
+            if tool_choice:
+                config_params["tool_config"] = tool_choice
 
             response = self._client.models.generate_content(
                 model=self.model,

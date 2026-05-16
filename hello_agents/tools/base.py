@@ -233,7 +233,7 @@ class Tool(ABC):
         return {
             "name": self.name,
             "description": self.description,
-            "parameters": [param.dict() for param in self.get_parameters()]
+            "parameters": [param.model_dump() for param in self.get_parameters()]
         }
 
     def to_openai_schema(self) -> Dict[str, Any]:

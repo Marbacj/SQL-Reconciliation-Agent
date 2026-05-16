@@ -82,7 +82,7 @@ class Agent(ABC):
                 {
                     "agent_name": self.name,
                     "agent_type": self.__class__.__name__,
-                    "config": self.config.dict()
+                    "config": self.config.model_dump()
                 }
             )
 
