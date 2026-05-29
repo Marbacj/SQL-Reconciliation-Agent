@@ -27,6 +27,7 @@ load_dotenv(PROJECT_ROOT / ".env")
 from hello_agents.core.llm import HelloAgentsLLM
 from hello_agents.core.config import Config
 from hello_agents.agents.reconciliation_agent import ReconciliationAgent
+from hello_agents.tools.builtin.case_store import CaseStore
 
 # ── 页面配置 ──────────────────────────────────────────
 
@@ -85,6 +86,7 @@ st.markdown("""
 def get_agent():
     db_path = PROJECT_ROOT / "data" / "mock_reconciliation.db"
     output_dir = PROJECT_ROOT / "reports"
+    case_dir = PROJECT_ROOT / "recon_cases"
 
     llm = HelloAgentsLLM()
     config = Config(
@@ -99,6 +101,7 @@ def get_agent():
         config=config,
         max_steps=8,
         output_dir=str(output_dir),
+        case_store=CaseStore(str(case_dir)),
     )
 
 
@@ -329,6 +332,23 @@ with st.sidebar:
                 for col in cols:
                     st.markdown(f"- `{col[1]}` ({col[2]})")
         conn.close()
+
+    # ── 技能积累 ──
+    st.markdown("---")
+    st.markdown("### 🧠 技能积累")
+
+    case_dir = PROJECT_ROOT / "recon_cases"
+    case_store = CaseStore(str(case_dir))
+    case_stats = case_store.stats()
+    st.metric("累计案例", case_stats["total_cases"])
+
+    if case_stats["total_cases"] > 0:
+        all_cases = case_store.list_all()
+        with st.expander(f"📋 历史案例 ({len(all_cases)})", expanded=False):
+            for case in all_cases[:10]:
+                st.markdown(
+                    f"- `{case['id']}` {case['query'][:50]}..."
+                )
 
 # ── 主界面 ────────────────────────────────────────────
 

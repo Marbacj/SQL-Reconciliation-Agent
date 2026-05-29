@@ -15,6 +15,7 @@
 """
 
 import json
+import re
 from typing import Optional, List, Dict, Any
 
 from .react_agent import ReActAgent
@@ -24,6 +25,7 @@ from ..tools.registry import ToolRegistry
 from ..tools.builtin.sql_tool import SQLTool
 from ..tools.builtin.diff_tool import DiffTool
 from ..tools.builtin.report_tool import ReportTool
+from ..tools.builtin.case_store import CaseStore, build_few_shot_prompt
 
 
 # ==================== 对账专用 System Prompt ====================
@@ -118,9 +120,13 @@ class ReconciliationAgent(ReActAgent):
         system_prompt: Optional[str] = None,
         config: Optional[Config] = None,
         max_steps: int = 8,
-        output_dir: str = "reports"
+        output_dir: str = "reports",
+        case_store: Optional[CaseStore] = None,
     ):
-        # 1. 构建工具注册表
+        # 1. 案例库（技能积累）
+        self.case_store = case_store or CaseStore()
+
+        # 2. 构建工具注册表
         tool_registry = ToolRegistry()
 
         # 注册对账工具（expandable=True 会自动展开子工具）
@@ -132,12 +138,16 @@ class ReconciliationAgent(ReActAgent):
         tool_names = tool_registry.list_tools()
         print(f"🔧 已注册 {len(tool_names)} 个对账工具: {', '.join(tool_names)}")
 
-        # 2. 初始化基类
+        # 3. 构建 System Prompt（含 few-shot 历史案例）
+        base_prompt = system_prompt or RECONCILIATION_SYSTEM_PROMPT
+        self._base_prompt = base_prompt  # 保存原始 prompt
+
+        # 4. 初始化基类
         super().__init__(
             name=name,
             llm=llm,
             tool_registry=tool_registry,
-            system_prompt=system_prompt or RECONCILIATION_SYSTEM_PROMPT,
+            system_prompt=base_prompt,  # 初始不带 few-shot，每次 run 动态注入
             config=config,
             max_steps=max_steps
         )
@@ -146,10 +156,14 @@ class ReconciliationAgent(ReActAgent):
         self.output_dir = output_dir
 
     def run(self, input_text: str, **kwargs) -> str:
-        """运行对账分析
+        """运行对账分析（含技能积累）
+
+        1. 检索相似历史案例 → 注入 few-shot Prompt
+        2. 执行 ReAct 对账循环
+        3. 自动保存新案例到知识库
 
         Args:
-            input_text: 自然语言对账需求（如 "对比昨天直播GMV和订单金额差异"）
+            input_text: 自然语言对账需求
 
         Returns:
             最终对账报告
@@ -158,10 +172,84 @@ class ReconciliationAgent(ReActAgent):
         print(f"📝 用户需求: {input_text}")
         print(f"📁 数据库: {self.db_path}")
         print(f"📂 报告目录: {self.output_dir}")
+
+        # ── 技能积累：检索相似案例 ──
+        similar_cases = self.case_store.find_similar(input_text)
+        if similar_cases:
+            print(f"🧠 找到 {len(similar_cases)} 个相关历史案例")
+            few_shot = build_few_shot_prompt(similar_cases)
+            self.system_prompt = self._base_prompt + few_shot
+        else:
+            self.system_prompt = self._base_prompt
+
+        stats = self.case_store.stats()
+        print(f"📚 案例库总量: {stats['total_cases']} 条")
         print("=" * 60)
 
         result = super().run(input_text, **kwargs)
 
+        # ── 技能积累：保存本次案例 ──
+        self._save_case(input_text)
+
         print("\n" + "=" * 60)
         print(f"✅ 对账任务完成")
+
+        # 显示案例库统计
+        new_stats = self.case_store.stats()
+        if new_stats["total_cases"] > stats["total_cases"]:
+            print(f"💾 新案例已入库（总计 {new_stats['total_cases']} 条）")
+
         return result
+
+    def _save_case(self, query: str):
+        """从最近一次执行中提取 SQL 并保存案例"""
+        try:
+            # 从 Agent 的消息历史中提取关键信息
+            sql_a = ""
+            sql_b = ""
+            key_column = ""
+            compare_columns = ""
+
+            # 遍历历史消息找 SQL 执行记录
+            for msg in getattr(self, '_history', []):
+                content = str(msg)
+                # 提取 SQL（匹配 SELECT ... FROM ...）
+                sqls = re.findall(
+                    r'(SELECT\s+.+?\s+FROM\s+.+?)(?:ORDER BY|GROUP BY|LIMIT|$|\))',
+                    content, re.IGNORECASE | re.DOTALL
+                )
+                if len(sqls) >= 2:
+                    sql_a = sqls[0].strip()
+                    sql_b = sqls[1].strip()
+
+                # 提取 key_column
+                key_match = re.search(r"key_column[\"']?\s*[:=]\s*[\"'](\w+)", content)
+                if key_match:
+                    key_column = key_match.group(1)
+
+                # 提取 compare_columns
+                cmp_match = re.search(
+                    r"compare_columns[\"']?\s*[:=]\s*[\"']([\w,]+)",
+                    content
+                )
+                if cmp_match:
+                    compare_columns = cmp_match.group(1)
+
+            if not sql_a:
+                return  # 没有 SQL 就不保存
+
+            # 提取差异摘要
+            diff_summary = "对账完成"
+            conclusion = "见完整报告"
+
+            self.case_store.save(
+                query=query,
+                sql_a=sql_a,
+                sql_b=sql_b,
+                key_column=key_column or "unknown",
+                compare_columns=compare_columns or "unknown",
+                diff_summary=diff_summary,
+                conclusion=conclusion,
+            )
+        except Exception:
+            pass  # 案例保存失败不应影响对账主流程
