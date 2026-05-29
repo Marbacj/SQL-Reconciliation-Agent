@@ -3,17 +3,16 @@ requires = ["setuptools>=61.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "hello-agents"
+name = "sql-recon-agent"
 version = "1.0.0"
-description = "生产级多智能体框架 - 工具响应协议、上下文工程、会话持久化、子代理机制、乐观锁、熔断器、Skills知识外化等16项核心能力"
+description = "自然语言驱动的自动化 SQL 数据对账系统 — ReAct Agent · NL2SQL · 跨表差异比对"
 readme = "README.md"
-license = {text = "CC-BY-NC-SA-4.0"}
+license = {text = "MIT"}
 authors = [
-    {name = "HelloAgents Team", email = "jjyaoao@126.com"}
+    {name = "Ma Bohui"}
 ]
 requires-python = ">=3.10"
 dependencies = [
-    # 核心依赖
     "openai>=1.0.0,<2.0.0",
     "requests>=2.25.0,<3.0.0",
     "python-dotenv>=0.19.0,<2.0.0",
@@ -29,51 +28,18 @@ gemini = ["google-genai>=1.0.0"]
 anthropic = ["anthropic>=0.20.0"]
 
 [project.urls]
-Homepage = "https://github.com/jjyaoao/HelloAgents"
-Documentation = "https://github.com/jjyaoao/HelloAgents/blob/main/README.md"
-Repository = "https://github.com/jjyaoao/HelloAgents"
-"Bug Tracker" = "https://github.com/jjyaoao/HelloAgents/issues"
+Homepage = "https://github.com/Marbacj/HelloAgents-SQL-Reconciliation-Agent"
+Repository = "https://github.com/Marbacj/HelloAgents-SQL-Reconciliation-Agent"
 
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["hello_agents*"]
-exclude = ["tests*", "examples*", "docs*"]
+exclude = ["tests*", "examples*", "docs*", "skills*"]
 
 [tool.setuptools.package-data]
 hello_agents = ["py.typed"]
 
-[tool.black]
-line-length = 88
-target-version = ['py310']
-include = '\.pyi?$'
-extend-exclude = '''
-/(
-  # directories
-  \.eggs
-  | \.git
-  | \.hg
-  | \.mypy_cache
-  | \.tox
-  | \.venv
-  | build
-  | dist
-)/
-'''
-
-[tool.isort]
-profile = "black"
-multi_line_output = 3
-line_length = 88
-
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 python_files = ["test_*.py"]
-python_classes = ["Test*"]
-python_functions = ["test_*"]
 addopts = "-v --tb=short"
-
-[tool.mypy]
-python_version = "3.10"
-warn_return_any = true
-warn_unused_configs = true
-disallow_untyped_defs = true
