@@ -161,3 +161,16 @@ cython_debug/
 .obsidian
 .pytest_cache
 .venv
+
+# =============================================================================
+# HelloAgents SQL Reconciliation Agent
+# =============================================================================
+# Demo data (generated, not source)
+data/*.db
+
+# Generated reports
+reports/
+
+# Runtime artifacts
+memory/
+memory_data/
