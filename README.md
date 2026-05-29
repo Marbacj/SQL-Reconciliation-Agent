@@ -64,8 +64,8 @@ ToolRegistry
 
 ```bash
 # 1. 安装
-git clone https://github.com/Marbacj/HelloAgents-SQL-Reconciliation-Agent.git
-cd HelloAgents-SQL-Reconciliation-Agent
+git clone https://github.com/Marbacj/SQL-Reconciliation-Agent.git
+cd SQL-Reconciliation-Agent
 pip install -e .
 
 # 2. 配置 LLM

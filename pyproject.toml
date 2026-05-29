@@ -28,8 +28,8 @@ gemini = ["google-genai>=1.0.0"]
 anthropic = ["anthropic>=0.20.0"]
 
 [project.urls]
-Homepage = "https://github.com/Marbacj/HelloAgents-SQL-Reconciliation-Agent"
-Repository = "https://github.com/Marbacj/HelloAgents-SQL-Reconciliation-Agent"
+Homepage = "https://github.com/Marbacj/SQL-Reconciliation-Agent"
+Repository = "https://github.com/Marbacj/SQL-Reconciliation-Agent"
 
 [tool.setuptools.packages.find]
 where = ["."]
