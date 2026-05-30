@@ -76,11 +76,8 @@ LLM_BASE_URL=https://api.deepseek.com' > .env
 # 3. 生成 Demo 数据（含 3 处故意差异）
 python data/generate_mock_data.py
 
-# 4. 运行对账（命令行）
+# 4. 运行对账
 python examples/reconciliation_demo.py
-
-# 5. 或启动 Web UI
-streamlit run examples/reconciliation_ui.py
 ```
 
 ---
@@ -109,8 +106,7 @@ Agent 完整执行 7 步推理，正确识别 3 处故意注入的差异：
 │   │   └── builtin/               # SQLTool · DiffTool · ReportTool
 │   └── context/                   # 上下文工程 · Token 管理
 ├── examples/
-│   ├── reconciliation_demo.py     # 命令行 Demo
-│   └── reconciliation_ui.py       # Streamlit Web UI
+│   └── reconciliation_demo.py     # 完整对账 Demo
 ├── data/
 │   ├── generate_mock_data.py      # 模拟数据生成（26+27 行，3 处差异）
 │   └── mock_reconciliation.db     # SQLite 数据库（gitignored）
