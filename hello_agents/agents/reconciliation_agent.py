@@ -21,6 +21,9 @@ from typing import Optional, List, Dict, Any
 from .react_agent import ReActAgent
 from ..core.llm import HelloAgentsLLM
 from ..core.config import Config
+from ..core.intent import Intent, IntentLabel, RECONCILIATION_INTENT
+from ..core.intent_registry import IntentRegistry
+from ..core.intent_router import IntentRouter, RouteResult
 from ..tools.registry import ToolRegistry
 from ..tools.builtin.sql_tool import SQLTool
 from ..tools.builtin.diff_tool import DiffTool
@@ -122,32 +125,34 @@ class ReconciliationAgent(ReActAgent):
         max_steps: int = 8,
         output_dir: str = "reports",
         case_store: Optional[CaseStore] = None,
+        intent_router: Optional[IntentRouter] = None,
     ):
         # 1. 案例库（技能积累）
         self.case_store = case_store or CaseStore()
 
-        # 2. 构建工具注册表
-        tool_registry = ToolRegistry()
+        # 2. 意图路由器
+        self.intent_router = intent_router or IntentRouter()
+        self._last_route: Optional[RouteResult] = None
 
-        # 注册对账工具（expandable=True 会自动展开子工具）
+        # 3. 构建工具注册表（注册全部 5 个工具，路由时按需过滤）
+        tool_registry = ToolRegistry()
         tool_registry.register_tool(SQLTool(db_path=db_path))
         tool_registry.register_tool(DiffTool(db_path=db_path))
         tool_registry.register_tool(ReportTool(output_dir=output_dir))
 
-        # 打印已注册的工具
         tool_names = tool_registry.list_tools()
-        print(f"🔧 已注册 {len(tool_names)} 个对账工具: {', '.join(tool_names)}")
+        print(f"🔧 已注册 {len(tool_names)} 个工具: {', '.join(tool_names)}")
 
-        # 3. 构建 System Prompt（含 few-shot 历史案例）
+        # 4. System Prompt（保留旧兼容路径 + 新意图路由路径）
         base_prompt = system_prompt or RECONCILIATION_SYSTEM_PROMPT
-        self._base_prompt = base_prompt  # 保存原始 prompt
+        self._base_prompt = base_prompt
 
-        # 4. 初始化基类
+        # 5. 初始化基类
         super().__init__(
             name=name,
             llm=llm,
             tool_registry=tool_registry,
-            system_prompt=base_prompt,  # 初始不带 few-shot，每次 run 动态注入
+            system_prompt=base_prompt,
             config=config,
             max_steps=max_steps
         )
@@ -156,11 +161,12 @@ class ReconciliationAgent(ReActAgent):
         self.output_dir = output_dir
 
     def run(self, input_text: str, **kwargs) -> str:
-        """运行对账分析（含技能积累）
+        """运行对账分析（含意图路由 + 技能积累）
 
-        1. 检索相似历史案例 → 注入 few-shot Prompt
-        2. 执行 ReAct 对账循环
-        3. 自动保存新案例到知识库
+        1. 意图路由 → 选择 Prompt + 工具过滤 + max_steps
+        2. CaseStore 检索 → few-shot 注入
+        3. ReAct 推理执行
+        4. 自动保存案例
 
         Args:
             input_text: 自然语言对账需求
@@ -168,36 +174,42 @@ class ReconciliationAgent(ReActAgent):
         Returns:
             最终对账报告
         """
-        print(f"\n📊 {self.name} 启动对账任务")
+        print(f"\n📊 {self.name} 启动")
         print(f"📝 用户需求: {input_text}")
-        print(f"📁 数据库: {self.db_path}")
-        print(f"📂 报告目录: {self.output_dir}")
 
-        # ── 技能积累：检索相似案例 ──
-        similar_cases = self.case_store.find_similar(input_text)
-        if similar_cases:
-            print(f"🧠 找到 {len(similar_cases)} 个相关历史案例")
-            few_shot = build_few_shot_prompt(similar_cases)
-            self.system_prompt = self._base_prompt + few_shot
-        else:
-            self.system_prompt = self._base_prompt
+        # ── Phase 1: 意图路由 ──
+        route = self.intent_router.route(
+            input_text,
+            llm=self.llm,
+            case_store=self.case_store,
+        )
+        self._last_route = route
 
-        stats = self.case_store.stats()
-        print(f"📚 案例库总量: {stats['total_cases']} 条")
+        print(f"🎯 意图路由: {self.intent_router.route_summary()}")
+        if route.label.reasoning:
+            print(f"   理由: {route.label.reasoning}")
+
+        # 应用路由结果
+        intent = route.intent
+        self.system_prompt = route.system_prompt
+        self.max_steps = intent.max_steps
+
+        # 工具过滤：只保留该 Intent 需要的工具
+        if intent.required_tools:
+            self.tool_registry.keep_only(intent.required_tools)
+            remaining = self.tool_registry.list_tools()
+            print(f"🔧 工具过滤后: {', '.join(remaining)}")
+
         print("=" * 60)
 
         result = super().run(input_text, **kwargs)
 
-        # ── 技能积累：保存本次案例 ──
-        self._save_case(input_text)
+        # ── 保存案例（仅对账意图） ──
+        if route.label.intent == "reconciliation":
+            self._save_case(input_text)
 
         print("\n" + "=" * 60)
-        print(f"✅ 对账任务完成")
-
-        # 显示案例库统计
-        new_stats = self.case_store.stats()
-        if new_stats["total_cases"] > stats["total_cases"]:
-            print(f"💾 新案例已入库（总计 {new_stats['total_cases']} 条）")
+        print(f"✅ 任务完成 [{route.label.intent}]")
 
         return result
 

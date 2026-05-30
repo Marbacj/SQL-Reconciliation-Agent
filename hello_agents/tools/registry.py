@@ -1,6 +1,6 @@
 """工具注册表 - HelloAgents原生工具系统"""
 
-from typing import Optional, Any, Callable, Dict
+from typing import Optional, Any, Callable, Dict, List
 import time
 from .base import Tool
 from .response import ToolResponse, ToolStatus
@@ -123,6 +123,12 @@ class ToolRegistry:
     def get_tool(self, name: str) -> Optional[Tool]:
         """获取Tool对象"""
         return self._tools.get(name)
+
+    def keep_only(self, names: List[str]):
+        """保留指定工具，移除其余（用于意图路由工具过滤）"""
+        to_remove = [n for n in list(self._tools.keys()) if n not in names]
+        for name in to_remove:
+            self.unregister(name)
 
     def get_function(self, name: str) -> Optional[Callable]:
         """获取工具函数"""

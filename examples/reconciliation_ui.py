@@ -393,6 +393,26 @@ if run_btn and query:
 
     st.markdown("---")
 
+    # 路由决策
+    route = agent._last_route
+    if route:
+        intent_name = route.intent.name
+        method = route.label.method
+        conf = route.label.confidence
+        tools_info = f"{route.tools_before}→{route.tools_after}"
+
+        col_r1, col_r2, col_r3, col_r4 = st.columns(4)
+        with col_r1:
+            st.metric("路由意图", intent_name)
+        with col_r2:
+            st.metric("分类方式", method)
+        with col_r3:
+            st.metric("置信度", f"{conf:.0%}")
+        with col_r4:
+            st.metric("工具过滤", tools_info)
+        if route.label.reasoning:
+            st.caption(f"💡 {route.label.reasoning}")
+
     # 指标卡片
     steps = parse_steps(raw_output)
     render_metrics(steps, raw_output)
