@@ -1,0 +1,223 @@
+{
+  "schema:live_gmv": {
+    "key": "schema:live_gmv",
+    "value": {
+      "table": "live_gmv",
+      "columns": [
+        {
+          "name": "id",
+          "type": "INTEGER",
+          "nullable": true
+        },
+        {
+          "name": "live_id",
+          "type": "INTEGER",
+          "nullable": false
+        },
+        {
+          "name": "live_title",
+          "type": "TEXT",
+          "nullable": true
+        },
+        {
+          "name": "gmv",
+          "type": "DECIMAL(12,2)",
+          "nullable": true
+        },
+        {
+          "name": "live_date",
+          "type": "DATE",
+          "nullable": true
+        },
+        {
+          "name": "platform",
+          "type": "TEXT",
+          "nullable": true
+        },
+        {
+          "name": "anchor_name",
+          "type": "TEXT",
+          "nullable": true
+        }
+      ]
+    },
+    "memory_type": "semantic",
+    "importance": 0.9,
+    "timestamp": "2026-05-31T23:25:54.160105",
+    "ttl": null
+  },
+  "term:id": {
+    "key": "term:id",
+    "value": {
+      "field": "id",
+      "table": "order_amount",
+      "type": "INTEGER"
+    },
+    "memory_type": "semantic",
+    "importance": 0.7,
+    "timestamp": "2026-05-31T23:25:54.176603",
+    "ttl": null
+  },
+  "term:live_id": {
+    "key": "term:live_id",
+    "value": {
+      "field": "live_id",
+      "table": "order_amount",
+      "type": "INTEGER"
+    },
+    "memory_type": "semantic",
+    "importance": 0.7,
+    "timestamp": "2026-05-31T23:25:54.180095",
+    "ttl": null
+  },
+  "term:live_title": {
+    "key": "term:live_title",
+    "value": {
+      "field": "live_title",
+      "table": "live_gmv",
+      "type": "TEXT"
+    },
+    "memory_type": "semantic",
+    "importance": 0.7,
+    "timestamp": "2026-05-31T23:25:54.164338",
+    "ttl": null
+  },
+  "term:gmv": {
+    "key": "term:gmv",
+    "value": {
+      "field": "gmv",
+      "table": "live_gmv",
+      "type": "DECIMAL(12,2)"
+    },
+    "memory_type": "semantic",
+    "importance": 0.7,
+    "timestamp": "2026-05-31T23:25:54.166045",
+    "ttl": null
+  },
+  "term:live_date": {
+    "key": "term:live_date",
+    "value": {
+      "field": "live_date",
+      "table": "live_gmv",
+      "type": "DATE"
+    },
+    "memory_type": "semantic",
+    "importance": 0.7,
+    "timestamp": "2026-05-31T23:25:54.168046",
+    "ttl": null
+  },
+  "term:platform": {
+    "key": "term:platform",
+    "value": {
+      "field": "platform",
+      "table": "live_gmv",
+      "type": "TEXT"
+    },
+    "memory_type": "semantic",
+    "importance": 0.7,
+    "timestamp": "2026-05-31T23:25:54.171228",
+    "ttl": null
+  },
+  "term:anchor_name": {
+    "key": "term:anchor_name",
+    "value": {
+      "field": "anchor_name",
+      "table": "live_gmv",
+      "type": "TEXT"
+    },
+    "memory_type": "semantic",
+    "importance": 0.7,
+    "timestamp": "2026-05-31T23:25:54.172941",
+    "ttl": null
+  },
+  "schema:order_amount": {
+    "key": "schema:order_amount",
+    "value": {
+      "table": "order_amount",
+      "columns": [
+        {
+          "name": "id",
+          "type": "INTEGER",
+          "nullable": true
+        },
+        {
+          "name": "order_id",
+          "type": "TEXT",
+          "nullable": false
+        },
+        {
+          "name": "live_id",
+          "type": "INTEGER",
+          "nullable": false
+        },
+        {
+          "name": "total_amount",
+          "type": "DECIMAL(12,2)",
+          "nullable": true
+        },
+        {
+          "name": "order_date",
+          "type": "DATE",
+          "nullable": true
+        },
+        {
+          "name": "order_status",
+          "type": "TEXT",
+          "nullable": true
+        }
+      ]
+    },
+    "memory_type": "semantic",
+    "importance": 0.9,
+    "timestamp": "2026-05-31T23:25:54.174851",
+    "ttl": null
+  },
+  "term:order_id": {
+    "key": "term:order_id",
+    "value": {
+      "field": "order_id",
+      "table": "order_amount",
+      "type": "TEXT"
+    },
+    "memory_type": "semantic",
+    "importance": 0.7,
+    "timestamp": "2026-05-31T23:25:54.178277",
+    "ttl": null
+  },
+  "term:total_amount": {
+    "key": "term:total_amount",
+    "value": {
+      "field": "total_amount",
+      "table": "order_amount",
+      "type": "DECIMAL(12,2)"
+    },
+    "memory_type": "semantic",
+    "importance": 0.7,
+    "timestamp": "2026-05-31T23:25:54.181625",
+    "ttl": null
+  },
+  "term:order_date": {
+    "key": "term:order_date",
+    "value": {
+      "field": "order_date",
+      "table": "order_amount",
+      "type": "DATE"
+    },
+    "memory_type": "semantic",
+    "importance": 0.7,
+    "timestamp": "2026-05-31T23:25:54.183031",
+    "ttl": null
+  },
+  "term:order_status": {
+    "key": "term:order_status",
+    "value": {
+      "field": "order_status",
+      "table": "order_amount",
+      "type": "TEXT"
+    },
+    "memory_type": "semantic",
+    "importance": 0.7,
+    "timestamp": "2026-05-31T23:25:54.185144",
+    "ttl": null
+  }
+}

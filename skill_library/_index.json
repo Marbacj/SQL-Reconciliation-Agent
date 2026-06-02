@@ -1,0 +1,67 @@
+{
+  "sql_live_gmv_1": {
+    "id": "sql_live_gmv_1",
+    "name": "SQL 模式: live_gmv",
+    "description": "对比直播 GMV 和订单金额",
+    "category": "sql_pattern",
+    "content": {
+      "sql": "SELECT live_id, SUM(gmv) AS total_gmv FROM live_gmv WHERE live_date='2026-05-27'",
+      "tables": [
+        "live_gmv"
+      ],
+      "query_example": "对比直播 GMV 和订单金额"
+    },
+    "source_session": "",
+    "usage_count": 1,
+    "created_at": "2026-05-31T23:25:54.202116",
+    "last_used": "2026-05-31T23:25:54.204466"
+  },
+  "sql_order_amount_2": {
+    "id": "sql_order_amount_2",
+    "name": "SQL 模式: order_amount",
+    "description": "对比直播 GMV 和订单金额",
+    "category": "sql_pattern",
+    "content": {
+      "sql": "SELECT live_id, SUM(total_amount) AS total_order FROM order_amount WHERE order_date='2026-05-27'",
+      "tables": [
+        "order_amount"
+      ],
+      "query_example": "对比直播 GMV 和订单金额"
+    },
+    "source_session": "",
+    "usage_count": 1,
+    "created_at": "2026-05-31T23:25:54.202777",
+    "last_used": "2026-05-31T23:25:54.205651"
+  },
+  "rule_diff_232554": {
+    "id": "rule_diff_232554",
+    "name": "差异判断规则",
+    "description": "对账差异的判断标准和阈值",
+    "category": "rule",
+    "content": {
+      "query_context": "对比直播 GMV 和订单金额",
+      "has_diff": true,
+      "threshold_percent": null,
+      "result_summary": "发现 3 处差异，2 处超 100 元阈值"
+    },
+    "source_session": "",
+    "usage_count": 0,
+    "created_at": "2026-05-31T23:25:54.207111",
+    "last_used": null
+  },
+  "term_total_gmv_total_order": {
+    "id": "term_total_gmv_total_order",
+    "name": "术语映射: total_gmv ↔ total_order",
+    "description": "跨表列名对应: total_gmv ⟷ total_order",
+    "category": "term_mapping",
+    "content": {
+      "left_column": "total_gmv",
+      "right_column": "total_order",
+      "context": "跨表对账字段映射"
+    },
+    "source_session": "",
+    "usage_count": 0,
+    "created_at": "2026-05-31T23:25:54.208737",
+    "last_used": null
+  }
+}

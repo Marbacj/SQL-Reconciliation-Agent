@@ -1,0 +1,11 @@
+topic: "SQL Reconciliation Agent 从零重构方案"
+created: 2026-06-01
+current_round: 2
+max_stale_rounds: 3
+
+decisions:
+  - id: D01
+    title: "v2 重构总体策略：LangGraph + 外部依赖 + 简历优先 + 6.5 周完整 Roadmap"
+    status: confirmed
+    confirmed_at: 2
+    doc_path: "./decisions/D01-rebuild-strategy.md"

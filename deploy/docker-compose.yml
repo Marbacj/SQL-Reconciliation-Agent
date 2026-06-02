@@ -1,0 +1,75 @@
+version: "3.9"
+
+services:
+  app:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    image: recon-v2:latest
+    ports:
+      - "8000:8000"
+    environment:
+      # LLM API Key（从宿主机 .env 注入，不进 git）
+      - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY}
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - LITELLM_MODEL=${LITELLM_MODEL:-deepseek/deepseek-chat}
+      # 数据库
+      - SQLITE_DB_PATH=/app/data/recon_v2.sqlite
+      - EVAL_DB_PATH=/app/data/eval_data.sqlite
+      # Schema Linking：json 模式（本地文件，无需 Milvus）
+      - SCHEMA_STORE=json
+      - SCHEMA_INDEX_PATH=/app/data/schema_index.json
+      # 基础设施
+      - REDIS_URL=redis://redis:6379/0
+      - QDRANT_URL=http://qdrant:6333
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://phoenix:6006
+    volumes:
+      - ../data:/app/data
+    depends_on:
+      redis:
+        condition: service_started
+      qdrant:
+        condition: service_started
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  qdrant:
+    image: qdrant/qdrant:latest
+    ports:
+      - "6333:6333"
+    volumes:
+      - qdrant_data:/qdrant/storage
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:6333/healthz"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+
+  phoenix:
+    image: arizephoenix/phoenix:latest
+    ports:
+      - "6006:6006"
+    restart: unless-stopped
+
+volumes:
+  redis_data:
+  qdrant_data:

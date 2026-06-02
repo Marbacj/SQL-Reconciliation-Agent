@@ -1,0 +1,32 @@
+{
+  "id": "20260531_231106",
+  "timestamp": "2026-05-31T23:11:06.371821",
+  "query": "对比昨天直播 GMV 和订单金额",
+  "sql_a": "SELECT live_id, SUM(gmv) AS total_gmv FROM live_gmv WHERE live_date='2026-05-27' GROUP BY live_id ORDER BY live_id",
+  "sql_b": "SELECT live_id, SUM(total_amount) AS total_order FROM order_amount WHERE order_date='2026-05-27' GROUP BY live_id ORDER BY live_id",
+  "key_column": "live_id",
+  "compare_columns": "total_gmv,total_order",
+  "diff_summary": "发现 3 处差异",
+  "conclusion": "见报告",
+  "keywords": [
+    "as",
+    "by",
+    "from",
+    "gmv",
+    "group",
+    "live_date",
+    "live_gmv",
+    "live_id",
+    "order",
+    "order_amount",
+    "order_date",
+    "select",
+    "sum",
+    "total_amount",
+    "total_gmv",
+    "total_order",
+    "where",
+    "和订单金额",
+    "对比昨天直播"
+  ]
+}
