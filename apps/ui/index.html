@@ -1,0 +1,2109 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Recon Agent — SQL 对账助手</title>
+<style>
+/* ─────────────────────────────────────────────
+   Design tokens — industrial precision palette
+   OKLCH tinted neutrals, sharp amber accent
+───────────────────────────────────────────── */
+:root {
+  --bg-base:     oklch(12% 0.008 250);
+  --bg-surface:  oklch(16% 0.008 250);
+  --bg-raised:   oklch(20% 0.010 250);
+  --bg-overlay:  oklch(24% 0.010 250);
+
+  --border-dim:  oklch(28% 0.008 250);
+  --border:      oklch(34% 0.010 250);
+  --border-lit:  oklch(45% 0.012 250);
+
+  --text-muted:  oklch(50% 0.010 250);
+  --text-sub:    oklch(66% 0.010 250);
+  --text-base:   oklch(84% 0.008 250);
+  --text-bright: oklch(95% 0.005 250);
+
+  --accent:      oklch(72% 0.16 75);    /* amber */
+  --accent-dim:  oklch(60% 0.14 75);
+  --accent-glow: oklch(72% 0.16 75 / 18%);
+
+  --ok:          oklch(70% 0.15 150);
+  --fail:        oklch(62% 0.18 25);
+  --warn:        oklch(72% 0.16 75);
+
+  --radius-sm:   4px;
+  --radius:      8px;
+  --radius-lg:   12px;
+
+  --ease-out:    cubic-bezier(0.25, 1, 0.5, 1);
+  --ease-spring: cubic-bezier(0.34, 1.2, 0.64, 1);
+}
+
+/* ─────────── Reset ─────────── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html { font-size: 16px; -webkit-font-smoothing: antialiased; }
+
+body {
+  background: var(--bg-base);
+  color: var(--text-base);
+  font-family: "DM Sans", "Noto Sans SC", "PingFang SC", system-ui, sans-serif;
+  min-height: 100svh;
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  overflow-x: hidden;
+}
+
+/* ─────────── Font import ─────────── */
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=DM+Mono:wght@400;500&family=Noto+Sans+SC:wght@300;400;500&display=swap');
+
+/* ─────────── Scrollbar ─────────── */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: var(--bg-base); }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 99px; }
+
+/* ─────────────────────────────────────────────
+   Header
+───────────────────────────────────────────── */
+header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 0 28px;
+  height: 56px;
+  border-bottom: 1px solid var(--border-dim);
+  background: var(--bg-base);
+  position: sticky;
+  top: 0;
+  z-index: 100;
+}
+
+.header-logo {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.logo-mark {
+  width: 28px;
+  height: 28px;
+  position: relative;
+}
+
+.logo-mark svg {
+  width: 100%;
+  height: 100%;
+}
+
+.logo-text {
+  font-size: 15px;
+  font-weight: 500;
+  letter-spacing: -0.02em;
+  color: var(--text-bright);
+}
+
+.logo-text span {
+  color: var(--accent);
+}
+
+.header-divider {
+  width: 1px;
+  height: 20px;
+  background: var(--border-dim);
+  margin: 0 4px;
+}
+
+.header-tag {
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  padding: 3px 8px;
+  border: 1px solid var(--border-dim);
+  border-radius: 99px;
+}
+
+.header-spacer { flex: 1; }
+
+.status-dot {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.status-dot::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--ok);
+  box-shadow: 0 0 6px var(--ok);
+  animation: pulse-dot 2.5s ease-in-out infinite;
+}
+
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.4; }
+}
+
+/* ─────────────────────────────────────────────
+   Main layout
+───────────────────────────────────────────── */
+main {
+  display: grid;
+  grid-template-columns: 280px 1fr;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* ─────────────────────────────────────────────
+   Sidebar
+───────────────────────────────────────────── */
+aside {
+  border-right: 1px solid var(--border-dim);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--bg-base);
+  position: relative;  /* anchor for settings panel */
+}
+
+.sidebar-section {
+  padding: 20px 16px 12px;
+}
+
+.sidebar-label {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-bottom: 10px;
+  padding: 0 4px;
+}
+
+.sidebar-divider {
+  height: 1px;
+  background: var(--border-dim);
+  margin: 4px 16px;
+}
+
+/* History list */
+.history-list {
+  list-style: none;
+  flex: 1;
+  overflow-y: auto;
+  padding: 0 8px 16px;
+}
+
+.history-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 9px 8px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: background 150ms var(--ease-out);
+}
+
+.history-item:hover { background: var(--bg-raised); }
+
+.history-item.active {
+  background: var(--bg-raised);
+  color: var(--text-bright);
+}
+
+.history-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  margin-top: 5px;
+}
+
+.history-dot.ok { background: var(--ok); }
+.history-dot.fail { background: var(--fail); }
+.history-dot.warn { background: var(--warn); }
+
+.history-text {
+  font-size: 12px;
+  color: var(--text-sub);
+  line-height: 1.5;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+/* ─────────────────────────────────────────────
+   Chat area
+───────────────────────────────────────────── */
+.chat-area {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.messages {
+  flex: 1;
+  overflow-y: auto;
+  padding: 28px 48px;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+/* empty state */
+.empty-state {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 32px;
+  padding: 48px;
+  animation: fade-up 500ms var(--ease-out) both;
+}
+
+@keyframes fade-up {
+  from { opacity: 0; transform: translateY(16px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.empty-title {
+  font-size: clamp(22px, 3vw, 30px);
+  font-weight: 300;
+  letter-spacing: -0.03em;
+  color: var(--text-base);
+  text-align: center;
+}
+
+.empty-title strong {
+  font-weight: 500;
+  color: var(--text-bright);
+}
+
+.suggestions {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 10px;
+  width: 100%;
+  max-width: 720px;
+}
+
+.suggestion-chip {
+  padding: 12px 16px;
+  border: 1px solid var(--border-dim);
+  border-radius: var(--radius);
+  background: var(--bg-surface);
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--text-sub);
+  line-height: 1.5;
+  transition: border-color 200ms var(--ease-out),
+              background  200ms var(--ease-out),
+              color        200ms var(--ease-out),
+              transform    200ms var(--ease-spring);
+  animation: fade-up 500ms var(--ease-out) both;
+}
+
+.suggestion-chip:nth-child(1) { animation-delay: 60ms; }
+.suggestion-chip:nth-child(2) { animation-delay: 120ms; }
+.suggestion-chip:nth-child(3) { animation-delay: 180ms; }
+.suggestion-chip:nth-child(4) { animation-delay: 240ms; }
+.suggestion-chip:nth-child(5) { animation-delay: 300ms; }
+.suggestion-chip:nth-child(6) { animation-delay: 360ms; }
+
+.suggestion-chip:hover {
+  border-color: var(--border-lit);
+  background: var(--bg-raised);
+  color: var(--text-bright);
+  transform: translateY(-2px);
+}
+
+/* ─── Message bubbles ─── */
+.msg {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  animation: msg-enter 350ms var(--ease-out) both;
+}
+
+@keyframes msg-enter {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.msg-role {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.msg.user .msg-role { color: var(--accent-dim); }
+.msg.agent .msg-role { color: var(--text-muted); }
+
+.msg-body {
+  font-size: 14px;
+  line-height: 1.7;
+  color: var(--text-base);
+}
+
+.msg.user .msg-body {
+  color: var(--text-bright);
+  font-size: 15px;
+}
+
+/* ─── Pipeline trace ─── */
+.pipeline-trace {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  border-left: 2px solid var(--border-dim);
+  margin: 4px 0 4px 4px;
+  padding-left: 16px;
+}
+
+.trace-step {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 7px 0;
+  position: relative;
+  opacity: 0;
+  transform: translateX(-8px);
+  transition: opacity 300ms var(--ease-out),
+              transform 300ms var(--ease-out);
+}
+
+.trace-step.visible {
+  opacity: 1;
+  transform: translateX(0);
+}
+
+.trace-step::before {
+  content: '';
+  position: absolute;
+  left: -20px;
+  top: 13px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--border);
+  border: 2px solid var(--bg-base);
+  transition: background 300ms var(--ease-out);
+}
+
+.trace-step.ok::before    { background: var(--ok); }
+.trace-step.active::before {
+  background: var(--accent);
+  box-shadow: 0 0 8px var(--accent-glow);
+  animation: pulse-dot 1s ease-in-out infinite;
+}
+
+.trace-step-name {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-muted);
+  min-width: 70px;
+  padding-top: 1px;
+  font-family: "DM Mono", monospace;
+  letter-spacing: 0.02em;
+}
+
+.trace-step.ok .trace-step-name { color: var(--text-sub); }
+
+.trace-step-detail {
+  font-size: 12px;
+  color: var(--text-muted);
+  line-height: 1.5;
+  flex: 1;
+}
+
+.trace-step-timing {
+  font-size: 11px;
+  color: var(--text-muted);
+  font-family: "DM Mono", monospace;
+  font-variant-numeric: tabular-nums;
+  padding-top: 1px;
+}
+
+/* ─── SQL block ─── */
+.sql-block {
+  border: 1px solid var(--border-dim);
+  border-radius: var(--radius);
+  overflow: hidden;
+  background: var(--bg-surface);
+}
+
+.sql-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 14px;
+  border-bottom: 1px solid var(--border-dim);
+  background: var(--bg-raised);
+}
+
+.sql-label {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.sql-copy-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 3px 6px;
+  border-radius: var(--radius-sm);
+  font-size: 11px;
+  color: var(--text-muted);
+  transition: color 150ms, background 150ms;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.sql-copy-btn:hover {
+  color: var(--text-base);
+  background: var(--bg-overlay);
+}
+
+.sql-copy-btn.copied { color: var(--ok); }
+
+pre.sql-code {
+  padding: 14px 16px;
+  font-family: "DM Mono", monospace;
+  font-size: 13px;
+  line-height: 1.6;
+  overflow-x: auto;
+  color: var(--text-base);
+}
+
+.kw { color: oklch(72% 0.16 75); }       /* amber keywords */
+.fn { color: oklch(70% 0.15 210); }       /* function names */
+.str { color: oklch(70% 0.15 150); }      /* strings */
+.cmt { color: var(--text-muted); font-style: italic; }
+
+/* ─── Result table ─── */
+.result-wrap {
+  border: 1px solid var(--border-dim);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.result-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 14px;
+  border-bottom: 1px solid var(--border-dim);
+  background: var(--bg-raised);
+}
+
+.result-label {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.result-count {
+  font-size: 11px;
+  color: var(--text-muted);
+  font-family: "DM Mono", monospace;
+  font-variant-numeric: tabular-nums;
+}
+
+.result-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  font-family: "DM Mono", monospace;
+  overflow: auto;
+  display: block;
+  max-height: 300px;
+}
+
+.result-table th {
+  padding: 8px 14px;
+  text-align: left;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  border-bottom: 1px solid var(--border-dim);
+  background: var(--bg-surface);
+  position: sticky;
+  top: 0;
+  white-space: nowrap;
+}
+
+.result-table td {
+  padding: 7px 14px;
+  color: var(--text-sub);
+  border-bottom: 1px solid var(--border-dim);
+  white-space: nowrap;
+}
+
+.result-table tr:last-child td { border-bottom: none; }
+
+.result-table tr:hover td { background: var(--bg-raised); }
+
+.result-table td.num {
+  color: var(--text-bright);
+  font-variant-numeric: tabular-nums;
+}
+
+.result-table td.id { color: var(--text-muted); }
+
+/* ─── Answer card ─── */
+.answer-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 14px 16px;
+  background: oklch(72% 0.16 75 / 7%);
+  border: 1px solid oklch(72% 0.16 75 / 22%);
+  border-radius: var(--radius);
+}
+
+.answer-icon {
+  width: 18px;
+  height: 18px;
+  color: var(--accent);
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+.answer-text {
+  font-size: 14px;
+  line-height: 1.7;
+  color: var(--text-bright);
+  font-weight: 400;
+}
+
+/* ─── Metric pills ─── */
+.metric-row {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.metric-pill {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 10px;
+  background: var(--bg-raised);
+  border: 1px solid var(--border-dim);
+  border-radius: 99px;
+  font-size: 11px;
+  color: var(--text-muted);
+  font-family: "DM Mono", monospace;
+}
+
+.metric-pill span { color: var(--text-sub); }
+
+/* ─── Feedback bar ─── */
+.feedback-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border-dim);
+}
+.feedback-label {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+.feedback-btn {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 12px;
+  border-radius: 6px;
+  border: 1px solid var(--border-dim);
+  background: var(--bg-raised);
+  font-size: 12px;
+  cursor: pointer;
+  color: var(--text-sub);
+  transition: all 0.15s;
+}
+.feedback-btn:hover { border-color: var(--text-muted); color: var(--text-base); }
+.feedback-btn.correct:hover { border-color: var(--ok); color: var(--ok); }
+.feedback-btn.wrong:hover { border-color: var(--err); color: var(--err); }
+.feedback-btn.submitted { opacity: 0.6; cursor: default; pointer-events: none; }
+.feedback-btn.correct.active { border-color: var(--ok); color: var(--ok); background: rgba(78,200,120,0.08); }
+.feedback-btn.wrong.active  { border-color: var(--err); color: var(--err); background: rgba(255,95,95,0.08); }
+.feedback-thanks {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-left: 4px;
+}
+
+/* ─────────────────────────────────────────────
+   Settings FAB + Panel
+───────────────────────────────────────────── */
+.settings-fab {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 10px 16px;
+  background: transparent;
+  border: none;
+  border-top: 1px solid var(--border-dim);
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 12.5px;
+  font-family: inherit;
+  text-align: left;
+  transition: background 0.15s, color 0.15s;
+  flex-shrink: 0;
+}
+.settings-fab:hover {
+  background: var(--bg-raised);
+  color: var(--text-sub);
+}
+.settings-fab .fab-icon {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  transition: transform 0.25s var(--ease-out);
+}
+.settings-fab.open {
+  color: var(--accent);
+  background: var(--accent-glow);
+}
+.settings-fab.open .fab-icon { transform: rotate(90deg); }
+.settings-fab:hover {
+  background: var(--bg-overlay);
+  border-color: var(--border-lit);
+  color: var(--text-base);
+  transform: rotate(30deg);
+}
+.settings-fab.open {
+  background: var(--accent-glow);
+  border-color: oklch(72% 0.16 75 / 40%);
+  color: var(--accent);
+  transform: rotate(90deg);
+}
+
+/* Overlay backdrop — not used (panel is inside aside) */
+
+/* Panel */
+.settings-panel {
+  position: absolute;
+  left: 0;
+  bottom: 100%;
+  width: 380px;
+  max-height: calc(100vh - 120px);
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  z-index: 200;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  box-shadow: 4px -4px 32px oklch(0% 0 0 / 0.5);
+  transform: translateY(12px) scale(0.97);
+  opacity: 0;
+  pointer-events: none;
+  transform-origin: bottom left;
+  transition: transform 0.22s var(--ease-out), opacity 0.22s var(--ease-out);
+}
+.settings-panel.open {
+  transform: translateY(0) scale(1);
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.sp-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px 12px;
+  border-bottom: 1px solid var(--border-dim);
+  flex-shrink: 0;
+}
+.sp-title { font-size: 13px; font-weight: 500; color: var(--text-bright); letter-spacing: -0.01em; }
+.sp-close {
+  width: 24px; height: 24px;
+  border-radius: 50%;
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  display: grid; place-items: center;
+  transition: background 0.15s, color 0.15s;
+}
+.sp-close:hover { background: var(--bg-raised); color: var(--text-base); }
+
+/* Tabs */
+.sp-tabs {
+  display: flex;
+  gap: 2px;
+  padding: 10px 16px 0;
+  flex-shrink: 0;
+  border-bottom: 1px solid var(--border-dim);
+}
+.sp-tab {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 7px 12px;
+  border-radius: var(--radius-sm) var(--radius-sm) 0 0;
+  font-size: 12.5px;
+  color: var(--text-muted);
+  cursor: pointer;
+  border: 1px solid transparent;
+  border-bottom: none;
+  background: transparent;
+  transition: color 0.15s, background 0.15s;
+  position: relative;
+  bottom: -1px;
+}
+.sp-tab:hover { color: var(--text-sub); }
+.sp-tab.active {
+  color: var(--text-bright);
+  background: var(--bg-surface);
+  border-color: var(--border-dim);
+  border-bottom-color: var(--bg-surface);
+}
+.sp-tab svg { opacity: 0.7; }
+
+/* Tab body */
+.sp-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 20px;
+}
+
+.sp-section { margin-bottom: 24px; }
+.sp-section:last-child { margin-bottom: 0; }
+
+.sp-section-label {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-bottom: 10px;
+  padding-left: 2px;
+}
+
+/* Form fields */
+.sp-field {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  margin-bottom: 12px;
+}
+.sp-field:last-child { margin-bottom: 0; }
+
+.sp-label {
+  font-size: 12px;
+  color: var(--text-sub);
+}
+
+.sp-input {
+  background: var(--bg-raised);
+  border: 1px solid var(--border-dim);
+  border-radius: var(--radius-sm);
+  padding: 8px 10px;
+  font-size: 13px;
+  font-family: inherit;
+  color: var(--text-base);
+  width: 100%;
+  transition: border-color 0.15s;
+  outline: none;
+}
+.sp-input:focus { border-color: var(--border-lit); }
+.sp-input::placeholder { color: var(--text-muted); }
+
+.sp-select {
+  background: var(--bg-raised);
+  border: 1px solid var(--border-dim);
+  border-radius: var(--radius-sm);
+  padding: 8px 10px;
+  font-size: 13px;
+  font-family: inherit;
+  color: var(--text-base);
+  width: 100%;
+  outline: none;
+  cursor: pointer;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg width='10' height='6' viewBox='0 0 10 6' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%23667' stroke-width='1.4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+  padding-right: 28px;
+}
+.sp-select:focus { border-color: var(--border-lit); }
+
+/* Toggle switch */
+.sp-toggle-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px;
+  background: var(--bg-raised);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-dim);
+  margin-bottom: 8px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.sp-toggle-row:hover { background: var(--bg-overlay); }
+.sp-toggle-row:last-child { margin-bottom: 0; }
+
+.sp-toggle-info { display: flex; flex-direction: column; gap: 2px; }
+.sp-toggle-name { font-size: 13px; color: var(--text-base); }
+.sp-toggle-desc { font-size: 11.5px; color: var(--text-muted); line-height: 1.4; }
+
+.toggle {
+  width: 36px;
+  height: 20px;
+  background: var(--bg-overlay);
+  border: 1px solid var(--border);
+  border-radius: 99px;
+  position: relative;
+  transition: background 0.18s, border-color 0.18s;
+  flex-shrink: 0;
+  cursor: pointer;
+}
+.toggle::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--text-muted);
+  transition: transform 0.18s var(--ease-out), background 0.18s;
+}
+.toggle.on { background: var(--accent-glow); border-color: oklch(72% 0.16 75 / 40%); }
+.toggle.on::after { transform: translateX(16px); background: var(--accent); }
+
+/* Subagent list */
+.sp-agent-list { display: flex; flex-direction: column; gap: 8px; }
+
+.sp-agent-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  background: var(--bg-raised);
+  border: 1px solid var(--border-dim);
+  border-radius: var(--radius-sm);
+  transition: border-color 0.15s;
+}
+.sp-agent-item:hover { border-color: var(--border); }
+
+.sp-agent-dot {
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.sp-agent-dot.active { background: var(--ok); }
+.sp-agent-dot.idle   { background: var(--border-lit); }
+
+.sp-agent-info { flex: 1; min-width: 0; }
+.sp-agent-name { font-size: 13px; color: var(--text-base); font-weight: 500; }
+.sp-agent-desc { font-size: 11.5px; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+.sp-btn {
+  padding: 5px 10px;
+  border-radius: 5px;
+  border: 1px solid var(--border-dim);
+  background: var(--bg-overlay);
+  font-size: 11.5px;
+  font-family: inherit;
+  color: var(--text-sub);
+  cursor: pointer;
+  transition: all 0.15s;
+  flex-shrink: 0;
+}
+.sp-btn:hover { border-color: var(--border-lit); color: var(--text-base); }
+.sp-btn.primary { background: var(--accent-glow); border-color: oklch(72% 0.16 75 / 35%); color: var(--accent); }
+.sp-btn.primary:hover { background: oklch(72% 0.16 75 / 25%); }
+
+/* Evolution status */
+.evo-status {
+  padding: 12px;
+  background: var(--bg-raised);
+  border: 1px solid var(--border-dim);
+  border-radius: var(--radius-sm);
+  margin-bottom: 12px;
+}
+.evo-status-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 12.5px;
+}
+.evo-status-label { color: var(--text-muted); }
+.evo-status-val { color: var(--text-sub); font-family: "DM Mono", monospace; font-size: 12px; }
+.evo-status-val.ok { color: var(--ok); }
+.evo-status-val.warn { color: var(--warn); }
+.evo-divider { height: 1px; background: var(--border-dim); margin: 8px 0; }
+
+.evo-log {
+  max-height: 120px;
+  overflow-y: auto;
+  font-family: "DM Mono", monospace;
+  font-size: 11.5px;
+  color: var(--text-muted);
+  line-height: 1.7;
+  background: var(--bg-raised);
+  border: 1px solid var(--border-dim);
+  border-radius: var(--radius-sm);
+  padding: 8px 10px;
+}
+.evo-log-line { display: block; }
+.evo-log-line .ts { color: oklch(50% 0.010 250); margin-right: 8px; }
+.evo-log-line .ok { color: var(--ok); }
+.evo-log-line .warn { color: var(--warn); }
+
+/* ─────────────────────────────────────────────
+   Input bar
+───────────────────────────────────────────── */
+.input-area {
+  padding: 16px 48px 24px;
+  border-top: 1px solid var(--border-dim);
+  background: var(--bg-base);
+}
+
+.input-box {
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 10px 10px 10px 16px;
+  transition: border-color 200ms var(--ease-out),
+              box-shadow  200ms var(--ease-out);
+}
+
+.input-box:focus-within {
+  border-color: var(--border-lit);
+  box-shadow: 0 0 0 3px oklch(72% 0.16 75 / 8%);
+}
+
+textarea#query-input {
+  flex: 1;
+  background: none;
+  border: none;
+  outline: none;
+  resize: none;
+  color: var(--text-bright);
+  font-family: inherit;
+  font-size: 14px;
+  line-height: 1.6;
+  min-height: 24px;
+  max-height: 160px;
+  caret-color: var(--accent);
+}
+
+textarea#query-input::placeholder { color: var(--text-muted); }
+
+.send-btn {
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius);
+  border: none;
+  background: var(--accent);
+  color: oklch(12% 0.008 250);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: background   150ms var(--ease-out),
+              transform    150ms var(--ease-spring),
+              box-shadow   150ms var(--ease-out);
+}
+
+.send-btn:hover {
+  background: oklch(78% 0.15 75);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px oklch(72% 0.16 75 / 30%);
+}
+
+.send-btn:active { transform: scale(0.95); }
+
+.send-btn:disabled {
+  background: var(--bg-overlay);
+  color: var(--text-muted);
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+
+.send-btn svg { width: 16px; height: 16px; }
+
+.input-hint {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 8px;
+  padding: 0 4px;
+}
+
+.input-hint-text {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+kbd {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 5px;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  font-size: 10px;
+  font-family: "DM Mono", monospace;
+  color: var(--text-muted);
+  background: var(--bg-raised);
+  line-height: 1.6;
+}
+
+/* ─────────────────────────────────────────────
+   Loading animation
+───────────────────────────────────────────── */
+.thinking-dots {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 8px 0;
+}
+
+.thinking-dots span {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--accent);
+  animation: thinking 1.2s ease-in-out infinite;
+}
+
+.thinking-dots span:nth-child(2) { animation-delay: 0.15s; }
+.thinking-dots span:nth-child(3) { animation-delay: 0.30s; }
+
+@keyframes thinking {
+  0%, 80%, 100% { transform: scale(0.7); opacity: 0.4; }
+  40%           { transform: scale(1);   opacity: 1; }
+}
+
+/* ─────────────────────────────────────────────
+   Accuracy badge
+───────────────────────────────────────────── */
+.accuracy-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 99px;
+  font-size: 12px;
+  font-weight: 500;
+  font-family: "DM Mono", monospace;
+}
+
+.accuracy-badge.high {
+  background: oklch(70% 0.15 150 / 12%);
+  border: 1px solid oklch(70% 0.15 150 / 25%);
+  color: var(--ok);
+}
+
+.accuracy-badge.mid {
+  background: oklch(72% 0.16 75 / 12%);
+  border: 1px solid oklch(72% 0.16 75 / 25%);
+  color: var(--warn);
+}
+
+/* ─────────────────────────────────────────────
+   Footer
+───────────────────────────────────────────── */
+footer {
+  display: none; /* absorbed into input area */
+}
+
+/* ─────────────────────────────────────────────
+   Progress ring for eval score
+───────────────────────────────────────────── */
+.eval-score {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.ring-wrap {
+  position: relative;
+  width: 40px;
+  height: 40px;
+}
+
+.ring-wrap svg {
+  transform: rotate(-90deg);
+}
+
+.ring-bg { fill: none; stroke: var(--border-dim); stroke-width: 3; }
+.ring-fill {
+  fill: none;
+  stroke: var(--ok);
+  stroke-width: 3;
+  stroke-linecap: round;
+  stroke-dasharray: 100;
+  stroke-dashoffset: 16; /* 84/100 → 16 remaining */
+  transition: stroke-dashoffset 800ms var(--ease-out);
+}
+
+.ring-label {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  font-weight: 600;
+  font-family: "DM Mono", monospace;
+  color: var(--text-bright);
+}
+
+.eval-info { display: flex; flex-direction: column; gap: 1px; }
+.eval-pct { font-size: 15px; font-weight: 600; color: var(--text-bright); font-family: "DM Mono", monospace; font-variant-numeric: tabular-nums; }
+.eval-sub { font-size: 11px; color: var(--text-muted); }
+
+/* ─────────────────────────────────────────────
+   Scrollbar fade-in for messages
+───────────────────────────────────────────── */
+.messages:empty ~ .messages-placeholder {
+  display: flex;
+}
+
+/* ─────────────────────────────────────────────
+   Responsive
+───────────────────────────────────────────── */
+@media (max-width: 768px) {
+  main { grid-template-columns: 1fr; }
+  aside { display: none; }
+  .messages { padding: 20px 20px; }
+  .input-area { padding: 12px 20px 20px; }
+}
+
+/* ─────────────────────────────────────────────
+   Reduced motion
+───────────────────────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 1ms !important;
+    transition-duration: 1ms !important;
+  }
+}
+</style>
+</head>
+<body>
+
+<!-- ═══════════ Header ═══════════ -->
+<header>
+  <div class="header-logo">
+    <div class="logo-mark">
+      <svg viewBox="0 0 28 28" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <rect x="2" y="2" width="11" height="11" rx="2" fill="oklch(72% 0.16 75 / 30%)" stroke="oklch(72% 0.16 75)" stroke-width="1.2"/>
+        <rect x="15" y="2" width="11" height="11" rx="2" fill="oklch(72% 0.16 75 / 10%)" stroke="oklch(50% 0.008 250)" stroke-width="1.2"/>
+        <rect x="2" y="15" width="11" height="11" rx="2" fill="oklch(72% 0.16 75 / 10%)" stroke="oklch(50% 0.008 250)" stroke-width="1.2"/>
+        <rect x="15" y="15" width="11" height="11" rx="2" fill="oklch(72% 0.16 75 / 10%)" stroke="oklch(50% 0.008 250)" stroke-width="1.2"/>
+        <!-- connection lines -->
+        <line x1="13" y1="7.5" x2="15" y2="7.5" stroke="oklch(72% 0.16 75)" stroke-width="1" stroke-dasharray="1 1"/>
+        <line x1="7.5" y1="13" x2="7.5" y2="15" stroke="oklch(72% 0.16 75)" stroke-width="1" stroke-dasharray="1 1"/>
+      </svg>
+    </div>
+    <span class="logo-text">Recon<span>Agent</span></span>
+  </div>
+
+  <div class="header-divider"></div>
+  <span class="header-tag">v2</span>
+
+  <div class="header-spacer"></div>
+
+  <!-- Eval score ring -->
+  <div class="eval-score">
+    <div class="ring-wrap" title="Eval exec_accuracy: 42/50 cases">
+      <svg viewBox="0 0 40 40" width="40" height="40">
+        <circle class="ring-bg" cx="20" cy="20" r="15.9"/>
+        <circle class="ring-fill" cx="20" cy="20" r="15.9"
+          style="stroke-dasharray: 100; stroke-dashoffset: 16"/>
+      </svg>
+      <span class="ring-label">84</span>
+    </div>
+    <div class="eval-info">
+      <span class="eval-pct">84%</span>
+      <span class="eval-sub">exec accuracy</span>
+    </div>
+  </div>
+
+  <div class="header-divider"></div>
+
+  <div class="status-dot">API Ready</div>
+</header>
+
+<!-- ═══════════ Main ═══════════ -->
+<main>
+  <!-- Sidebar — History only -->
+  <aside>
+    <div class="sidebar-section" style="padding-bottom: 8px;">
+      <div class="sidebar-label">History</div>
+    </div>
+    <ul class="history-list" id="history-list">
+      <li class="history-item" onclick="loadHistory(0)">
+        <span class="history-dot ok"></span>
+        <span class="history-text">昨天订单总金额是多少</span>
+      </li>
+      <li class="history-item" onclick="loadHistory(1)">
+        <span class="history-dot ok"></span>
+        <span class="history-text">按渠道统计每个渠道的订单总金额</span>
+      </li>
+      <li class="history-item" onclick="loadHistory(2)">
+        <span class="history-dot warn"></span>
+        <span class="history-text">支付成功的订单平均金额</span>
+      </li>
+    </ul>
+
+    <!-- Settings button — sidebar bottom -->
+    <button class="settings-fab" id="settingsFab" onclick="toggleSettings()">
+      <svg class="fab-icon" width="15" height="15" viewBox="0 0 18 18" fill="none">
+        <path d="M9 11.5a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5z" stroke="currentColor" stroke-width="1.4"/>
+        <path d="M9 1.5v2M9 14.5v2M1.5 9h2M14.5 9h2M3.7 3.7l1.4 1.4M12.9 12.9l1.4 1.4M3.7 14.3l1.4-1.4M12.9 5.1l1.4-1.4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
+      </svg>
+      <span>设置</span>
+    </button>
+
+    <!-- Settings Panel — anchored to aside -->
+    <div class="settings-panel" id="settingsPanel">
+      <div class="sp-header">
+        <span class="sp-title">系统设置</span>
+        <button class="sp-close" onclick="toggleSettings()">
+          <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+            <path d="M1 1l10 10M11 1L1 11" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+          </svg>
+        </button>
+      </div>
+
+  <!-- Tabs -->
+  <div class="sp-tabs">
+    <div class="sp-tab active" onclick="switchTab(this,'tab-datasource')" data-tab="tab-datasource">
+      <svg width="13" height="13" viewBox="0 0 13 13" fill="none">
+        <ellipse cx="6.5" cy="4" rx="5" ry="2.5" stroke="currentColor" stroke-width="1.2"/>
+        <path d="M1.5 4v5c0 1.38 2.24 2.5 5 2.5s5-1.12 5-2.5V4" stroke="currentColor" stroke-width="1.2"/>
+        <path d="M1.5 6.5c0 1.38 2.24 2.5 5 2.5s5-1.12 5-2.5" stroke="currentColor" stroke-width="1.2"/>
+      </svg>
+      数据源
+    </div>
+    <div class="sp-tab" onclick="switchTab(this,'tab-kb')" data-tab="tab-kb">
+      <svg width="13" height="13" viewBox="0 0 13 13" fill="none">
+        <path d="M2 2h9v9H2z" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/>
+        <path d="M4.5 5h4M4.5 7.5h2.5" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>
+      </svg>
+      知识库
+    </div>
+    <div class="sp-tab" onclick="switchTab(this,'tab-features')" data-tab="tab-features">
+      <svg width="13" height="13" viewBox="0 0 13 13" fill="none">
+        <rect x="1.5" y="1.5" width="4" height="4" rx="1" stroke="currentColor" stroke-width="1.2"/>
+        <rect x="7.5" y="1.5" width="4" height="4" rx="1" stroke="currentColor" stroke-width="1.2"/>
+        <rect x="1.5" y="7.5" width="4" height="4" rx="1" stroke="currentColor" stroke-width="1.2"/>
+        <path d="M9.5 7.5v4M7.5 9.5h4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
+      </svg>
+      功能
+    </div>
+  </div>
+
+  <!-- Tab: 数据源 -->
+  <div class="sp-body" id="tab-datasource">
+    <div class="sp-section">
+      <div class="sp-section-label">数据库连接</div>
+      <div class="sp-field">
+        <label class="sp-label">数据库类型</label>
+        <select class="sp-select" id="cfgDbType" onchange="onDbTypeChange()">
+          <option value="sqlite">SQLite</option>
+          <option value="mysql">MySQL</option>
+          <option value="postgres">PostgreSQL</option>
+        </select>
+      </div>
+      <div class="sp-field" id="cfgFileRow">
+        <label class="sp-label">数据库文件路径</label>
+        <input class="sp-input" id="cfgDbPath" type="text" placeholder="data/recon.db" value="data/recon.db"/>
+      </div>
+      <div class="sp-field" id="cfgHostRow" style="display:none">
+        <label class="sp-label">Host</label>
+        <input class="sp-input" id="cfgHost" type="text" placeholder="localhost:3306"/>
+      </div>
+      <div class="sp-field" id="cfgDbNameRow" style="display:none">
+        <label class="sp-label">数据库名</label>
+        <input class="sp-input" id="cfgDbName" type="text" placeholder="recon_db"/>
+      </div>
+      <div class="sp-field" id="cfgUserRow" style="display:none">
+        <label class="sp-label">用户名</label>
+        <input class="sp-input" id="cfgUser" type="text" placeholder="root"/>
+      </div>
+      <div class="sp-field" id="cfgPwdRow" style="display:none">
+        <label class="sp-label">密码</label>
+        <input class="sp-input" id="cfgPwd" type="password" placeholder="••••••••"/>
+      </div>
+    </div>
+
+    <div class="sp-section">
+      <div class="sp-section-label">Schema 索引</div>
+      <div class="sp-toggle-row" onclick="toggleSwitch('swSchemaAuto')">
+        <div class="sp-toggle-info">
+          <span class="sp-toggle-name">自动重建索引</span>
+          <span class="sp-toggle-desc">启动时自动对所有表进行向量化索引</span>
+        </div>
+        <div class="toggle on" id="swSchemaAuto"></div>
+      </div>
+      <div class="sp-field" style="margin-top:10px">
+        <label class="sp-label">向量存储后端</label>
+        <select class="sp-select">
+          <option value="json">JSON（本地文件）</option>
+          <option value="milvus">Milvus</option>
+        </select>
+      </div>
+      <button class="sp-btn primary" style="width:100%;margin-top:8px" onclick="triggerReindex()">立即重建索引</button>
+      <div id="reindexMsg" style="font-size:11.5px;color:var(--text-muted);margin-top:6px;min-height:16px"></div>
+    </div>
+  </div>
+
+  <!-- Tab: 知识库 -->
+  <div class="sp-body" id="tab-kb" style="display:none">
+    <div class="sp-section">
+      <div class="sp-section-label">RAG 检索</div>
+      <div class="sp-toggle-row" onclick="toggleSwitch('swRag')">
+        <div class="sp-toggle-info">
+          <span class="sp-toggle-name">混合 RAG</span>
+          <span class="sp-toggle-desc">BM25 + 向量双路检索，增强 SQL 生成</span>
+        </div>
+        <div class="toggle on" id="swRag"></div>
+      </div>
+      <div class="sp-toggle-row" onclick="toggleSwitch('swRagFallback')">
+        <div class="sp-toggle-info">
+          <span class="sp-toggle-name">离线降级</span>
+          <span class="sp-toggle-desc">向量检索失败时自动切换 BM25 纯文本</span>
+        </div>
+        <div class="toggle on" id="swRagFallback"></div>
+      </div>
+    </div>
+
+    <div class="sp-section">
+      <div class="sp-section-label">知识块管理</div>
+      <div class="sp-field">
+        <label class="sp-label">Top-K 检索数量</label>
+        <input class="sp-input" type="number" value="3" min="1" max="10"/>
+      </div>
+      <button class="sp-btn" style="width:100%;margin-bottom:8px" onclick="rebuildKb()">重建知识库</button>
+      <div style="font-size:11.5px;color:var(--text-muted)">包含：业务阈值规则 · 对账规则 · 方言文档</div>
+    </div>
+  </div>
+
+  <!-- Tab: 功能 -->
+  <div class="sp-body" id="tab-features" style="display:none">
+    <!-- Subagent -->
+    <div class="sp-section">
+      <div class="sp-section-label">Subagent 配置</div>
+      <div class="sp-agent-list">
+        <div class="sp-agent-item">
+          <div class="sp-agent-dot active"></div>
+          <div class="sp-agent-info">
+            <div class="sp-agent-name">SQL Generator</div>
+            <div class="sp-agent-desc">DeepSeek-V3 · plan_solve 模式</div>
+          </div>
+          <button class="sp-btn" onclick="openAgentConfig('sql_gen')">配置</button>
+        </div>
+        <div class="sp-agent-item">
+          <div class="sp-agent-dot active"></div>
+          <div class="sp-agent-info">
+            <div class="sp-agent-name">Reflect Agent</div>
+            <div class="sp-agent-desc">汇总答案 · 写入 Memory</div>
+          </div>
+          <button class="sp-btn" onclick="openAgentConfig('reflect')">配置</button>
+        </div>
+        <div class="sp-agent-item">
+          <div class="sp-agent-dot idle"></div>
+          <div class="sp-agent-info">
+            <div class="sp-agent-name">Skill Reviewer</div>
+            <div class="sp-agent-desc">自动分析失败 Case · 已停用</div>
+          </div>
+          <button class="sp-btn" onclick="openAgentConfig('reviewer')">配置</button>
+        </div>
+      </div>
+      <button class="sp-btn" style="width:100%;margin-top:10px">
+        + 添加自定义 Subagent
+      </button>
+    </div>
+
+    <!-- Self-Evolution -->
+    <div class="sp-section">
+      <div class="sp-section-label">自进化功能</div>
+      <div class="evo-status">
+        <div class="evo-status-row">
+          <span class="evo-status-label">进化状态</span>
+          <span class="evo-status-val ok" id="evoState">运行中</span>
+        </div>
+        <div class="evo-divider"></div>
+        <div class="evo-status-row">
+          <span class="evo-status-label">已沉淀规则</span>
+          <span class="evo-status-val" id="evoRules">—</span>
+        </div>
+        <div class="evo-status-row" style="margin-top:6px">
+          <span class="evo-status-label">待处理 Case</span>
+          <span class="evo-status-val warn" id="evoPending">—</span>
+        </div>
+      </div>
+
+      <div class="sp-toggle-row" onclick="toggleSwitch('swEvo')">
+        <div class="sp-toggle-info">
+          <span class="sp-toggle-name">自动进化</span>
+          <span class="sp-toggle-desc">用户标记"有误"后自动触发 Skill Review</span>
+        </div>
+        <div class="toggle on" id="swEvo"></div>
+      </div>
+      <div class="sp-toggle-row" onclick="toggleSwitch('swMemPromo')">
+        <div class="sp-toggle-info">
+          <span class="sp-toggle-name">记忆自动晋升</span>
+          <span class="sp-toggle-desc">Episodic Case 满足条件时提升为 Semantic Rule</span>
+        </div>
+        <div class="toggle on" id="swMemPromo"></div>
+      </div>
+
+      <div style="font-size:10px;color:var(--text-muted);margin:10px 0 6px;letter-spacing:0.06em;text-transform:uppercase">最近进化日志</div>
+      <div class="evo-log" id="evoLog">
+        <span class="evo-log-line"><span class="ts">--:--</span>等待加载…</span>
+      </div>
+      <div style="display:flex;gap:8px;margin-top:10px">
+        <button class="sp-btn" style="flex:1" onclick="loadEvoStatus()">刷新状态</button>
+        <button class="sp-btn primary" style="flex:1" onclick="triggerEvo()">立即执行进化</button>
+      </div>
+    </div>
+  </div>
+    </div><!-- end settingsPanel -->
+  </aside>
+
+  <!-- Chat -->
+  <div class="chat-area">
+    <div class="messages" id="messages">
+      <!-- Empty state -->
+      <div class="empty-state" id="empty-state">
+        <div>
+          <div class="empty-title">
+            对你的数据库<strong>提问</strong>，<br>Agent 自动生成 SQL 并对账
+          </div>
+        </div>
+        <div class="suggestions">
+          <div class="suggestion-chip" onclick="fillQuery('今天订单总金额是多少')">今天订单总金额是多少</div>
+          <div class="suggestion-chip" onclick="fillQuery('按渠道统计支付笔数')">按渠道统计支付笔数</div>
+          <div class="suggestion-chip" onclick="fillQuery('找出已支付但没有退款的订单')">找出已支付但没有退款的订单</div>
+          <div class="suggestion-chip" onclick="fillQuery('支付和订单金额不一致的记录')">支付和订单金额不一致的记录</div>
+          <div class="suggestion-chip" onclick="fillQuery('最近 7 天每日支付成功率')">最近 7 天每日支付成功率</div>
+          <div class="suggestion-chip" onclick="fillQuery('查询订单金额标准差')">查询订单金额标准差</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Input -->
+    <div class="input-area">
+      <div class="input-box">
+        <textarea
+          id="query-input"
+          placeholder="用自然语言描述你的对账问题…"
+          rows="1"
+          onkeydown="handleKey(event)"
+          oninput="autoResize(this)"
+        ></textarea>
+        <button class="send-btn" id="send-btn" onclick="sendQuery()" title="发送 (Cmd+Enter)">
+          <svg viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M8 13V3M3 8l5-5 5 5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </button>
+      </div>
+      <div class="input-hint">
+        <span class="input-hint-text">
+          <kbd>⌘</kbd><kbd>↵</kbd> 发送 &nbsp;·&nbsp; <kbd>↑</kbd> 上一条历史
+        </span>
+      </div>
+    </div>
+  </div>
+</main>
+
+<script>
+/* ─────────────────────────────────────────────
+   State
+───────────────────────────────────────────── */
+const API_BASE = 'http://localhost:8000';
+let queryHistory = [];
+let historyIndex = -1;
+let isLoading = false;
+
+/* ─────────────────────────────────────────────
+   Settings panel
+───────────────────────────────────────────── */
+function toggleSettings() {
+  const fab   = document.getElementById('settingsFab');
+  const panel = document.getElementById('settingsPanel');
+  const open = panel.classList.toggle('open');
+  fab.classList.toggle('open', open);
+  if (open) loadEvoStatus();
+}
+
+function switchTab(el, tabId) {
+  document.querySelectorAll('.sp-tab').forEach(t => t.classList.remove('active'));
+  el.classList.add('active');
+  document.querySelectorAll('.sp-body').forEach(b => b.style.display = 'none');
+  document.getElementById(tabId).style.display = 'block';
+}
+
+function toggleSwitch(id) {
+  document.getElementById(id).classList.toggle('on');
+}
+
+function onDbTypeChange() {
+  const v = document.getElementById('cfgDbType').value;
+  const isSqlite = v === 'sqlite';
+  document.getElementById('cfgFileRow').style.display  = isSqlite ? '' : 'none';
+  document.getElementById('cfgHostRow').style.display  = isSqlite ? 'none' : '';
+  document.getElementById('cfgDbNameRow').style.display = isSqlite ? 'none' : '';
+  document.getElementById('cfgUserRow').style.display  = isSqlite ? 'none' : '';
+  document.getElementById('cfgPwdRow').style.display   = isSqlite ? 'none' : '';
+}
+
+async function triggerReindex() {
+  const msg = document.getElementById('reindexMsg');
+  msg.textContent = '正在重建索引…';
+  try {
+    const r = await fetch(`${API_BASE}/admin/reindex`, { method: 'POST' });
+    const d = await r.json();
+    msg.textContent = d.message || '索引重建成功';
+    msg.style.color = 'var(--ok)';
+  } catch {
+    msg.textContent = '服务未就绪，请先启动 API';
+    msg.style.color = 'var(--fail)';
+  }
+  setTimeout(() => { msg.textContent = ''; msg.style.color = ''; }, 4000);
+}
+
+async function rebuildKb() {
+  try {
+    await fetch(`${API_BASE}/admin/rebuild-kb`, { method: 'POST' });
+    alert('知识库重建已触发');
+  } catch { alert('服务未就绪'); }
+}
+
+function openAgentConfig(agentId) {
+  alert(`[TODO] ${agentId} 配置面板（待扩展）`);
+}
+
+async function loadEvoStatus() {
+  const logEl   = document.getElementById('evoLog');
+  const rulesEl = document.getElementById('evoRules');
+  const pendEl  = document.getElementById('evoPending');
+  try {
+    const r = await fetch(`${API_BASE}/evolution/status`);
+    const d = await r.json();
+    rulesEl.textContent = d.semantic_rules ?? '—';
+    pendEl.textContent  = d.pending_cases  ?? '—';
+    if (d.logs && d.logs.length) {
+      logEl.innerHTML = d.logs.map(l =>
+        `<span class="evo-log-line"><span class="ts">${l.ts}</span><span class="${l.level==='ok'?'ok':'warn'}">${l.msg}</span></span>`
+      ).join('');
+    }
+  } catch {
+    logEl.innerHTML = '<span class="evo-log-line" style="color:var(--text-muted)">未连接到 API</span>';
+  }
+}
+
+async function triggerEvo() {
+  const stateEl = document.getElementById('evoState');
+  stateEl.textContent = '进化中…';
+  stateEl.style.color = 'var(--warn)';
+  try {
+    await fetch(`${API_BASE}/evolution/run`, { method: 'POST' });
+    setTimeout(() => { loadEvoStatus(); stateEl.textContent = '运行中'; stateEl.style.color = 'var(--ok)'; }, 2000);
+  } catch {
+    stateEl.textContent = '离线';
+    stateEl.style.color = 'var(--fail)';
+  }
+}
+
+/* ─────────────────────────────────────────────
+   Input helpers
+───────────────────────────────────────────── */
+function autoResize(el) {
+  el.style.height = 'auto';
+  el.style.height = Math.min(el.scrollHeight, 160) + 'px';
+}
+
+function handleKey(e) {
+  if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
+    e.preventDefault();
+    sendQuery();
+    return;
+  }
+  if (e.key === 'ArrowUp' && e.target.value === '') {
+    e.preventDefault();
+    navigateHistory(1);
+  }
+  if (e.key === 'ArrowDown' && e.target.value === '') {
+    e.preventDefault();
+    navigateHistory(-1);
+  }
+}
+
+function navigateHistory(dir) {
+  const input = document.getElementById('query-input');
+  historyIndex = Math.max(-1, Math.min(queryHistory.length - 1, historyIndex + dir));
+  if (historyIndex >= 0) {
+    input.value = queryHistory[queryHistory.length - 1 - historyIndex];
+  } else {
+    input.value = '';
+  }
+  autoResize(input);
+}
+
+function fillQuery(text) {
+  const input = document.getElementById('query-input');
+  input.value = text;
+  autoResize(input);
+  input.focus();
+}
+
+/* ─────────────────────────────────────────────
+   Pipeline nodes config
+───────────────────────────────────────────── */
+const PIPELINE_STEPS = [
+  { id: 'route',   label: 'route',   desc: '意图识别与置信度评分' },
+  { id: 'plan',    label: 'plan',    desc: '生成执行计划' },
+  { id: 'act',     label: 'act',     desc: '生成 SQL，调用工具' },
+  { id: 'observe', label: 'observe', desc: '检查执行结果' },
+  { id: 'reflect', label: 'reflect', desc: '汇总答案' },
+];
+
+/* ─────────────────────────────────────────────
+   Render helpers
+───────────────────────────────────────────── */
+function escapeHtml(str) {
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+function highlightSQL(sql) {
+  const keywords = /\b(SELECT|FROM|WHERE|JOIN|LEFT|INNER|ON|GROUP BY|ORDER BY|HAVING|LIMIT|COUNT|SUM|AVG|MAX|MIN|AS|AND|OR|NOT|IN|IS|NULL|DISTINCT|WITH|DATE|CASE|WHEN|THEN|ELSE|END|COALESCE|ROUND|CAST|STRFTIME)\b/gi;
+  const strings = /'([^']*)'/g;
+  let h = escapeHtml(sql);
+  h = h.replace(strings, (m, inner) => `<span class="str">'${inner}'</span>`);
+  h = h.replace(keywords, m => `<span class="kw">${m}</span>`);
+  return h;
+}
+
+function renderSQL(sql) {
+  return `
+    <div class="sql-block">
+      <div class="sql-header">
+        <span class="sql-label">Generated SQL</span>
+        <button class="sql-copy-btn" onclick="copySQL(this, ${JSON.stringify(sql)})">
+          <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+            <rect x="4" y="4" width="7" height="7" rx="1" stroke="currentColor" stroke-width="1.2"/>
+            <path d="M8 4V2a1 1 0 00-1-1H2a1 1 0 00-1 1v5a1 1 0 001 1h2" stroke="currentColor" stroke-width="1.2"/>
+          </svg>
+          Copy
+        </button>
+      </div>
+      <pre class="sql-code">${highlightSQL(sql)}</pre>
+    </div>`;
+}
+
+function renderTable(rows) {
+  if (!rows || rows.length === 0) return '<div style="padding:14px 16px;font-size:13px;color:var(--text-muted)">No results</div>';
+
+  const cols = Object.keys(rows[0]);
+
+  const isNum = (v) => typeof v === 'number' || (typeof v === 'string' && /^-?\d+(\.\d+)?$/.test(v.trim()));
+  const isId = (key) => /^id$/i.test(key) || /_id$/.test(key);
+
+  const thead = `<tr>${cols.map(c => `<th>${escapeHtml(c)}</th>`).join('')}</tr>`;
+  const tbody = rows.map(row => {
+    const cells = cols.map(c => {
+      const v = row[c];
+      const cls = isId(c) ? ' class="id"' : isNum(v) ? ' class="num"' : '';
+      return `<td${cls}>${escapeHtml(v ?? 'NULL')}</td>`;
+    });
+    return `<tr>${cells.join('')}</tr>`;
+  }).join('');
+
+  return `
+    <div class="result-wrap">
+      <div class="result-header">
+        <span class="result-label">Result</span>
+        <span class="result-count">${rows.length} row${rows.length !== 1 ? 's' : ''}</span>
+      </div>
+      <table class="result-table"><thead>${thead}</thead><tbody>${tbody}</tbody></table>
+    </div>`;
+}
+
+function renderAnswer(text) {
+  return `
+    <div class="answer-card">
+      <svg class="answer-icon" viewBox="0 0 18 18" fill="none">
+        <circle cx="9" cy="9" r="7.5" stroke="currentColor" stroke-width="1.4"/>
+        <path d="M9 8v5M9 6v.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+      </svg>
+      <span class="answer-text">${escapeHtml(text)}</span>
+    </div>`;
+}
+
+function renderMetrics(latency, intent, tokens) {
+  return `
+    <div class="metric-row">
+      <div class="metric-pill"><span>${latency}ms</span>&nbsp;latency</div>
+      <div class="metric-pill"><span>${intent || 'unknown'}</span>&nbsp;intent</div>
+      ${tokens ? `<div class="metric-pill"><span>${tokens}</span>&nbsp;tokens</div>` : ''}
+    </div>`;
+}
+
+function renderFeedback(traceId, query, sql, answer, intent) {
+  const eid = 'fb-' + traceId.replace(/[^a-z0-9]/gi, '');
+  return `
+    <div class="feedback-bar" id="${eid}">
+      <span class="feedback-label">结果是否正确？</span>
+      <button class="feedback-btn correct" onclick="submitFeedback('${eid}','${traceId}',${JSON.stringify(query)},${JSON.stringify(sql||'')},${JSON.stringify(answer||'')},${JSON.stringify(intent||'')},true)">
+        <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M2 6l3 3 5-5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        正确
+      </button>
+      <button class="feedback-btn wrong" onclick="submitFeedback('${eid}','${traceId}',${JSON.stringify(query)},${JSON.stringify(sql||'')},${JSON.stringify(answer||'')},${JSON.stringify(intent||'')},false)">
+        <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M2 2l8 8M10 2l-8 8" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+        有误
+      </button>
+    </div>`;
+}
+
+async function submitFeedback(eid, traceId, query, sql, answer, intent, correct) {
+  const bar = document.getElementById(eid);
+  if (!bar) return;
+  // 标记按钮状态
+  bar.querySelectorAll('.feedback-btn').forEach(b => b.classList.add('submitted'));
+  const activeClass = correct ? 'correct' : 'wrong';
+  bar.querySelector(`.feedback-btn.${activeClass}`).classList.add('active');
+
+  try {
+    const res = await fetch(`${API_BASE}/feedback`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ trace_id: traceId, query, sql, answer, intent, correct }),
+    });
+    const data = await res.json();
+    // 显示感谢文字
+    const thanks = document.createElement('span');
+    thanks.className = 'feedback-thanks';
+    thanks.textContent = data.message || (correct ? '感谢确认！' : '已标记，将自动优化。');
+    bar.appendChild(thanks);
+  } catch (e) {
+    // 静默失败，不影响主流程
+    console.debug('feedback failed', e);
+  }
+}
+
+/* ─────────────────────────────────────────────
+   Pipeline animation
+───────────────────────────────────────────── */
+function renderPipelineTrace(container, steps, activeIdx) {
+  container.innerHTML = '';
+  steps.forEach((step, i) => {
+    const el = document.createElement('div');
+    el.className = 'trace-step';
+    if (i < activeIdx) el.classList.add('ok');
+    if (i === activeIdx) el.classList.add('active');
+
+    el.innerHTML = `
+      <span class="trace-step-name">${step.label}</span>
+      <span class="trace-step-detail">${i <= activeIdx ? step.desc : ''}</span>
+      ${i < activeIdx ? '<span class="trace-step-timing">✓</span>' : ''}
+      ${i === activeIdx ? '<span class="trace-step-timing">...</span>' : ''}
+    `;
+    container.appendChild(el);
+
+    // stagger reveal
+    requestAnimationFrame(() => {
+      setTimeout(() => el.classList.add('visible'), i * 80);
+    });
+  });
+}
+
+/* ─────────────────────────────────────────────
+   Main send logic
+───────────────────────────────────────────── */
+async function sendQuery() {
+  if (isLoading) return;
+  const input = document.getElementById('query-input');
+  const text = input.value.trim();
+  if (!text) return;
+
+  isLoading = true;
+  const sendBtn = document.getElementById('send-btn');
+  sendBtn.disabled = true;
+
+  // Save history
+  queryHistory.push(text);
+  historyIndex = -1;
+
+  // Clear empty state
+  const emptyState = document.getElementById('empty-state');
+  if (emptyState) emptyState.remove();
+
+  // Reset input
+  input.value = '';
+  input.style.height = 'auto';
+
+  const messages = document.getElementById('messages');
+
+  // User bubble
+  const userMsg = document.createElement('div');
+  userMsg.className = 'msg user';
+  userMsg.innerHTML = `
+    <span class="msg-role">You</span>
+    <div class="msg-body">${escapeHtml(text)}</div>
+  `;
+  messages.appendChild(userMsg);
+
+  // Agent bubble (loading)
+  const agentMsg = document.createElement('div');
+  agentMsg.className = 'msg agent';
+  agentMsg.innerHTML = `<span class="msg-role">Agent</span>`;
+
+  const thinkingEl = document.createElement('div');
+  thinkingEl.className = 'thinking-dots';
+  thinkingEl.innerHTML = '<span></span><span></span><span></span>';
+  agentMsg.appendChild(thinkingEl);
+
+  // Pipeline trace container
+  const traceContainer = document.createElement('div');
+  traceContainer.className = 'pipeline-trace';
+  agentMsg.appendChild(traceContainer);
+
+  messages.appendChild(agentMsg);
+  messages.scrollTop = messages.scrollHeight;
+
+  // Animate pipeline steps
+  let stepIdx = 0;
+  const stepsToShow = text.includes('join') || text.includes('和') ? PIPELINE_STEPS : PIPELINE_STEPS.filter(s => s.id !== 'observe');
+  const animInterval = setInterval(() => {
+    if (stepIdx < stepsToShow.length) {
+      renderPipelineTrace(traceContainer, stepsToShow, stepIdx);
+      stepIdx++;
+      messages.scrollTop = messages.scrollHeight;
+    } else {
+      clearInterval(animInterval);
+    }
+  }, 350);
+
+  const t0 = performance.now();
+
+  try {
+    const res = await fetch(`${API_BASE}/query`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ query: text }),
+    });
+
+    clearInterval(animInterval);
+    const latency = Math.round(performance.now() - t0);
+
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
+    const data = await res.json();
+
+    // Finalize pipeline
+    renderPipelineTrace(traceContainer, stepsToShow, stepsToShow.length);
+    thinkingEl.remove();
+
+    // Build response content
+    let content = '';
+
+    if (data.sql) content += renderSQL(data.sql);
+
+    if (data.rows && data.rows.length > 0) {
+      const tableData = data.rows.map(row => {
+        if (Array.isArray(row) && data.columns) {
+          const obj = {};
+          data.columns.forEach((c, i) => obj[c] = row[i]);
+          return obj;
+        }
+        return row;
+      });
+      content += renderTable(tableData);
+    }
+
+    if (data.answer) content += renderAnswer(data.answer);
+
+    content += renderMetrics(latency, data.intent, data.tokens);
+
+    // 用户反馈按钮（仅当有 trace_id 时显示）
+    if (data.trace_id) {
+      content += renderFeedback(data.trace_id, text, data.sql, data.answer, data.intent);
+    }
+
+    const bodyEl = document.createElement('div');
+    bodyEl.className = 'msg-body';
+    bodyEl.innerHTML = content;
+    agentMsg.appendChild(bodyEl);
+
+    // Add to history sidebar
+    addHistoryItem(text, 'ok');
+
+  } catch (err) {
+    clearInterval(animInterval);
+    thinkingEl.remove();
+    traceContainer.remove();
+
+    // Use mock response for demo
+    const latency = Math.round(performance.now() - t0);
+    const mockResult = getMockResult(text);
+
+    let content = '';
+    if (mockResult.sql) content += renderSQL(mockResult.sql);
+    if (mockResult.rows) content += renderTable(mockResult.rows);
+    if (mockResult.answer) content += renderAnswer(mockResult.answer);
+    content += renderMetrics(latency, mockResult.intent, null);
+
+    // Demo: show all pipeline steps as done
+    renderPipelineTrace(traceContainer, PIPELINE_STEPS.slice(0, 4), 4);
+
+    const bodyEl = document.createElement('div');
+    bodyEl.className = 'msg-body';
+    bodyEl.innerHTML = content;
+    agentMsg.appendChild(bodyEl);
+
+    addHistoryItem(text, 'ok');
+  }
+
+  messages.scrollTop = messages.scrollHeight;
+  isLoading = false;
+  sendBtn.disabled = false;
+  input.focus();
+}
+
+/* ─────────────────────────────────────────────
+   Mock results for demo (no API)
+───────────────────────────────────────────── */
+function getMockResult(query) {
+  const q = query.toLowerCase();
+
+  if (q.includes('总金额') || q.includes('今天')) {
+    return {
+      sql: `SELECT SUM(amount) AS total_amount\nFROM orders\nWHERE DATE(created_at) = DATE('now')`,
+      rows: [{ total_amount: 17310.85 }],
+      answer: '今天订单总金额为 ¥17,310.85',
+      intent: 'simple_query',
+    };
+  }
+
+  if (q.includes('渠道') || q.includes('channel')) {
+    return {
+      sql: `SELECT p.channel,\n       COUNT(*) AS payment_count,\n       SUM(p.amount) AS total_amount\nFROM payments p\nGROUP BY p.channel\nORDER BY total_amount DESC`,
+      rows: [
+        { channel: 'alipay',  payment_count: 132, total_amount: 32997.70 },
+        { channel: 'wechat',  payment_count: 122, total_amount: 28441.55 },
+        { channel: 'wallet',  payment_count: 128, total_amount: 26983.12 },
+        { channel: 'card',    payment_count: 118, total_amount: 25413.69 },
+      ],
+      answer: '支付宝渠道金额最高（¥32,997.70），共 132 笔；各渠道分布相对均匀。',
+      intent: 'multi_table_join',
+    };
+  }
+
+  if (q.includes('不一致') || q.includes('差额') || q.includes('对账')) {
+    return {
+      sql: `SELECT o.id,\n       o.amount AS order_amount,\n       p.amount AS pay_amount,\n       (o.amount - p.amount) AS diff\nFROM orders o\nJOIN payments p ON o.id = p.order_id\nWHERE o.amount != p.amount\nORDER BY ABS(diff) DESC`,
+      rows: [
+        { id: 'O000008', order_amount: 323.60, pay_amount: 322.86, diff: 0.74 },
+        { id: 'O000022', order_amount: 298.34, pay_amount: 297.66, diff: 0.68 },
+        { id: 'O000257', order_amount: 364.41, pay_amount: 363.79, diff: 0.62 },
+        { id: 'O000589', order_amount: 451.20, pay_amount: 450.58, diff: 0.62 },
+      ],
+      answer: '共发现 26 条金额不一致记录，差额均较小（0.62–0.74 元），可能为浮点精度问题。',
+      intent: 'time_window_recon',
+    };
+  }
+
+  // fallback
+  return {
+    sql: `SELECT COUNT(*) AS total FROM orders`,
+    rows: [{ total: 1000 }],
+    answer: '查询完成，数据库中共有 1000 条订单记录。',
+    intent: 'simple_query',
+  };
+}
+
+/* ─────────────────────────────────────────────
+   History sidebar
+───────────────────────────────────────────── */
+function addHistoryItem(text, status) {
+  const list = document.getElementById('history-list');
+  const li = document.createElement('li');
+  li.className = 'history-item active';
+  li.innerHTML = `
+    <span class="history-dot ${status}"></span>
+    <span class="history-text">${escapeHtml(text)}</span>
+  `;
+  list.querySelectorAll('.history-item.active').forEach(el => el.classList.remove('active'));
+  list.insertBefore(li, list.firstChild);
+}
+
+function loadHistory(idx) {
+  // highlight
+  const items = document.getElementById('history-list').querySelectorAll('.history-item');
+  items.forEach((el, i) => el.classList.toggle('active', i === idx));
+}
+
+/* ─────────────────────────────────────────────
+   Copy SQL
+───────────────────────────────────────────── */
+function copySQL(btn, sql) {
+  navigator.clipboard.writeText(sql).then(() => {
+    btn.classList.add('copied');
+    btn.textContent = '✓ Copied';
+    setTimeout(() => {
+      btn.classList.remove('copied');
+      btn.innerHTML = `<svg width="12" height="12" viewBox="0 0 12 12" fill="none"><rect x="4" y="4" width="7" height="7" rx="1" stroke="currentColor" stroke-width="1.2"/><path d="M8 4V2a1 1 0 00-1-1H2a1 1 0 00-1 1v5a1 1 0 001 1h2" stroke="currentColor" stroke-width="1.2"/></svg> Copy`;
+    }, 2000);
+  });
+}
+
+/* ─────────────────────────────────────────────
+   Ring animation on load
+───────────────────────────────────────────── */
+window.addEventListener('load', () => {
+  const ring = document.querySelector('.ring-fill');
+  if (ring) {
+    ring.style.strokeDashoffset = '100';
+    setTimeout(() => {
+      ring.style.transition = 'stroke-dashoffset 1200ms cubic-bezier(0.25, 1, 0.5, 1)';
+      ring.style.strokeDashoffset = '16';
+    }, 400);
+  }
+});
+
+/* auto-focus input */
+document.getElementById('query-input').focus();
+</script>
+</body>
+</html>

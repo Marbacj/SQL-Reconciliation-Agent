@@ -41,7 +41,7 @@ class SkillReviewer:
         os.makedirs(skill_dir, exist_ok=True)
         self._index_path = os.path.join(skill_dir, "_index.json")
         self._skills: Dict[str, Skill] = self._load()
-        self._lock = threading.Lock()
+        self._lock = threading.RLock()  # 可重入：_save_skill 内部会调 _persist
 
     # ── 审查入口 ──
 

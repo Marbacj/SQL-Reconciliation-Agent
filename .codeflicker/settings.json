@@ -1,0 +1,16 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": ".*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "echo 'Hook triggered: $HOOK_EVENT'",
+            "timeout": 60000
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -35,8 +35,9 @@ class IntentRouter:
         agent.max_steps = result.intent.max_steps
     """
 
-    def __init__(self, registry: Optional[IntentRegistry] = None):
+    def __init__(self, registry: Optional[IntentRegistry] = None, skill_reviewer=None):
         self.registry = registry or IntentRegistry()
+        self.skill_reviewer = skill_reviewer  # 自进化闭环：用于加载历史 Skill
         self._last_route: Optional[RouteResult] = None
 
     @property
@@ -81,10 +82,30 @@ class IntentRouter:
                 from ..tools.builtin.case_store import build_few_shot_prompt
                 few_shot = build_few_shot_prompt(similar)
 
+        # Phase 3.5: 自进化 — 从 Skill 库加载历史经验
+        skill_block = ""
+        if self.skill_reviewer is not None:
+            try:
+                skills = self.skill_reviewer.find_skills(query, top_k=3)
+                if skills:
+                    lines = ["\n## 🌱 自进化经验（来自 Skill 库）\n"]
+                    for s in skills:
+                        import json as _json
+                        preview = _json.dumps(s.content, ensure_ascii=False)[:200]
+                        lines.append(
+                            f"- [{s.category}] {s.name} (used {s.usage_count}x)\n"
+                            f"  内容: `{preview}`\n"
+                        )
+                    skill_block = "".join(lines)
+            except Exception:
+                skill_block = ""
+
         # Phase 4: 组装 System Prompt
         system_prompt = intent.system_prompt
         if few_shot:
             system_prompt += "\n" + few_shot
+        if skill_block:
+            system_prompt += "\n" + skill_block
 
         result = RouteResult(
             label=label,
