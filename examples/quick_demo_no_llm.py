@@ -19,15 +19,15 @@ import time
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from hello_agents.tools.builtin.sql_tool import SQLTool
-from hello_agents.tools.builtin.diff_tool import DiffTool
-from hello_agents.tools.builtin.report_tool import ReportTool
-from hello_agents.tools.builtin.memory_tool import MemoryTool
-from hello_agents.tools.builtin.skill_reviewer import SkillReviewer
-from hello_agents.tools.builtin.rag_retriever import TableDocRetriever
-from hello_agents.tools.builtin.case_store import CaseStore
-from hello_agents.tools.registry import ToolRegistry
-from hello_agents.core.intent_router import IntentRouter
+from recon_core.tools.builtin.sql_tool import SQLTool
+from recon_core.tools.builtin.diff_tool import DiffTool
+from recon_core.tools.builtin.report_tool import ReportTool
+from recon_core.tools.builtin.memory_tool import MemoryTool
+from recon_core.tools.builtin.skill_reviewer import SkillReviewer
+from recon_core.tools.builtin.rag_retriever import TableDocRetriever
+from recon_core.tools.builtin.case_store import CaseStore
+from recon_core.tools.registry import ToolRegistry
+from recon_core.core.intent_router import IntentRouter
 
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))

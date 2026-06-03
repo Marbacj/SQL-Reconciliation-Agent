@@ -6,12 +6,12 @@ No LLM calls are made in these tests; we validate structure only.
 import os
 import pytest
 
-from hello_agents.agents.reconciliation_agent import (
+from recon_core.agents.reconciliation_agent import (
     ReconciliationAgent,
     RECONCILIATION_SYSTEM_PROMPT,
 )
-from hello_agents.core.llm import HelloAgentsLLM
-from hello_agents.core.config import Config
+from recon_core.core.llm import HelloAgentsLLM
+from recon_core.core.config import Config
 
 
 # Dummy LLM instance — constructor doesn't validate credentials,
@@ -157,11 +157,11 @@ class TestReconciliationAgentInit:
     # ---------- subclass identity ----------
 
     def test_is_react_agent_subclass(self):
-        from hello_agents.agents.react_agent import ReActAgent
+        from recon_core.agents.react_agent import ReActAgent
         assert issubclass(ReconciliationAgent, ReActAgent)
 
     def test_is_agent_subclass(self):
-        from hello_agents.core.agent import Agent
+        from recon_core.core.agent import Agent
         assert issubclass(ReconciliationAgent, Agent)
 
     # ---------- config ----------

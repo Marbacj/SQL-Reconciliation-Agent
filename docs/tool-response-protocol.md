@@ -41,7 +41,7 @@ def run(self, parameters: Dict[str, Any]) -> ToolResponse:
 ### 1. 创建成功响应
 
 ```python
-from hello_agents.tools.response import ToolResponse
+from recon_core.tools.response import ToolResponse
 
 # 简单成功响应
 response = ToolResponse.success(
@@ -60,7 +60,7 @@ response = ToolResponse.success(
 ### 2. 创建错误响应
 
 ```python
-from hello_agents.tools.errors import ToolErrorCode
+from recon_core.tools.errors import ToolErrorCode
 
 # 文件不存在
 response = ToolResponse.error(
@@ -101,7 +101,7 @@ response = ToolResponse.partial(
 ### 标准错误码（15种）
 
 ```python
-from hello_agents.tools.errors import ToolErrorCode
+from recon_core.tools.errors import ToolErrorCode
 
 # 资源相关
 ToolErrorCode.NOT_FOUND          # 资源不存在
@@ -149,9 +149,9 @@ class ToolResponse:
 ### 实现自定义工具
 
 ```python
-from hello_agents.tools.base import Tool, ToolParameter
-from hello_agents.tools.response import ToolResponse
-from hello_agents.tools.errors import ToolErrorCode
+from recon_core.tools.base import Tool, ToolParameter
+from recon_core.tools.response import ToolResponse
+from recon_core.tools.errors import ToolErrorCode
 from typing import Dict, Any, List
 
 class MyTool(Tool):
@@ -205,7 +205,7 @@ class MyTool(Tool):
 ### 在 Agent 中使用
 
 ```python
-from hello_agents import ReActAgent, HelloAgentsLLM, ToolRegistry
+from recon_core import ReActAgent, HelloAgentsLLM, ToolRegistry
 
 # 注册工具
 registry = ToolRegistry()
@@ -296,7 +296,7 @@ class NewTool(Tool):
 ### 案例 1：文件读取工具
 
 ```python
-from hello_agents.tools.builtin import ReadTool
+from recon_core.tools.builtin import ReadTool
 
 # 成功读取
 response = read_tool.run({"path": "config.py"})
@@ -318,7 +318,7 @@ response = read_tool.run({"path": "not_exist.py"})
 ### 案例 2：计算器工具
 
 ```python
-from hello_agents.tools.builtin import CalculatorTool
+from recon_core.tools.builtin import CalculatorTool
 
 calc = CalculatorTool()
 

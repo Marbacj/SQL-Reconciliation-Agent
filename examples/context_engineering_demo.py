@@ -8,11 +8,11 @@
 - 会话序列化和反序列化
 """
 
-from hello_agents.context.history import HistoryManager
-from hello_agents.context.truncator import ObservationTruncator
-from hello_agents.context.token_counter import TokenCounter
-from hello_agents.core.message import Message
-from hello_agents import SimpleAgent, HelloAgentsLLM, Config
+from recon_core.context.history import HistoryManager
+from recon_core.context.truncator import ObservationTruncator
+from recon_core.context.token_counter import TokenCounter
+from recon_core.core.message import Message
+from recon_core import SimpleAgent, HelloAgentsLLM, Config
 from pathlib import Path
 import tempfile
 

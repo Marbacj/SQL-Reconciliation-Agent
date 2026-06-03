@@ -3,7 +3,7 @@
 import asyncio
 from types import SimpleNamespace
 
-from hello_agents.core.llm_adapters import OpenAIAdapter
+from recon_core.core.llm_adapters import OpenAIAdapter
 
 
 def _content_chunk(text):

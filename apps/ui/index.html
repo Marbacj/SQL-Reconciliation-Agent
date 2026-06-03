@@ -955,6 +955,20 @@ pre.sql-code {
 .sp-btn.primary { background: var(--accent-glow); border-color: oklch(72% 0.16 75 / 35%); color: var(--accent); }
 .sp-btn.primary:hover { background: oklch(72% 0.16 75 / 25%); }
 
+/* Knowledge base doc list */
+.kb-doc-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 7px 10px;
+  border-bottom: 1px solid var(--border-dim);
+  cursor: pointer;
+  transition: background 0.12s;
+}
+.kb-doc-item:last-child { border-bottom: none; }
+.kb-doc-item:hover { background: var(--bg-raised); }
+
 /* Evolution status */
 .evo-status {
   padding: 12px;
@@ -1395,6 +1409,7 @@ footer {
 
   <!-- Tab: 知识库 -->
   <div class="sp-body" id="tab-kb" style="display:none">
+    <!-- RAG 参数（保留） -->
     <div class="sp-section">
       <div class="sp-section-label">RAG 检索</div>
       <div class="sp-toggle-row" onclick="toggleSwitch('swRag')">
@@ -1411,16 +1426,40 @@ footer {
         </div>
         <div class="toggle on" id="swRagFallback"></div>
       </div>
-    </div>
-
-    <div class="sp-section">
-      <div class="sp-section-label">知识块管理</div>
-      <div class="sp-field">
+      <div class="sp-field" style="margin-top:10px">
         <label class="sp-label">Top-K 检索数量</label>
         <input class="sp-input" type="number" value="3" min="1" max="10"/>
       </div>
-      <button class="sp-btn" style="width:100%;margin-bottom:8px" onclick="rebuildKb()">重建知识库</button>
-      <div style="font-size:11.5px;color:var(--text-muted)">包含：业务阈值规则 · 对账规则 · 方言文档</div>
+    </div>
+
+    <!-- 文档列表 -->
+    <div class="sp-section">
+      <div class="sp-section-label" style="display:flex;align-items:center;justify-content:space-between">
+        <span>文档管理</span>
+        <span id="kbDocCount" style="font-size:10px;color:var(--text-muted)">加载中…</span>
+      </div>
+      <div id="kbDocList" style="max-height:160px;overflow-y:auto;margin-bottom:8px;border:1px solid var(--border);border-radius:6px;background:var(--bg-base)">
+        <div style="padding:24px;text-align:center;color:var(--text-muted);font-size:12px">加载中…</div>
+      </div>
+      <!-- 上传区 -->
+      <label for="kbUploadInput" class="sp-btn" style="width:100%;text-align:center;display:block;cursor:pointer;margin-bottom:6px">
+        ＋ 上传 Markdown 文档
+        <input type="file" id="kbUploadInput" accept=".md" style="display:none" onchange="kbUploadFile(this)"/>
+      </label>
+      <button class="sp-btn" style="width:100%;margin-bottom:6px" onclick="rebuildKb()">重建索引</button>
+    </div>
+
+    <!-- 文档预览 / 编辑 -->
+    <div class="sp-section" id="kbPreviewSection" style="display:none">
+      <div class="sp-section-label" style="display:flex;align-items:center;justify-content:space-between">
+        <span id="kbPreviewTitle">预览</span>
+        <span style="display:flex;gap:6px">
+          <button class="sp-btn" onclick="kbSaveEdit()">保存</button>
+          <button class="sp-btn" onclick="closeKbPreview()">关闭</button>
+        </span>
+      </div>
+      <textarea id="kbPreviewContent"
+        style="width:100%;height:200px;resize:vertical;background:var(--bg-base);border:1px solid var(--border);border-radius:6px;padding:8px;font-family:'DM Mono',monospace;font-size:11.5px;color:var(--text-bright);line-height:1.6;box-sizing:border-box"></textarea>
     </div>
   </div>
 
@@ -1557,9 +1596,9 @@ footer {
 /* ─────────────────────────────────────────────
    State
 ───────────────────────────────────────────── */
-const API_BASE = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+const API_BASE = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
   ? 'http://localhost:8000'
-  : `http://${window.location.hostname}:8000`;
+  : `${window.location.protocol}//${window.location.hostname}`;
 /* ─────────────────────────────────────────────
    Multi-session state
 ───────────────────────────────────────────── */
@@ -1641,7 +1680,17 @@ async function switchToSession(id) {
       messages.appendChild(userMsg);
       const agentMsg = document.createElement('div');
       agentMsg.className = 'msg agent';
-      agentMsg.innerHTML = `<span class="msg-role">Agent</span><div class="msg-body">${m.html || ''}</div>`;
+      // 清洗旧版本 feedback-bar（内联参数已损坏），用存储的结构化数据重新生成
+      let html = m.html || '';
+      // 删除旧的 feedback-bar（含损坏 onclick）再重新注入
+      const tmp = document.createElement('div');
+      tmp.innerHTML = html;
+      tmp.querySelectorAll('.feedback-bar').forEach(fb => fb.remove());
+      // 重新注入属于此条消息的 feedback
+      if (m.traceId) {
+        tmp.innerHTML += renderFeedback(m.traceId, m.query || '', m.sql || '', m.answer || '', m.intent || '');
+      }
+      agentMsg.innerHTML = `<span class="msg-role">Agent</span><div class="msg-body">${tmp.innerHTML}</div>`;
       messages.appendChild(agentMsg);
     });
     messages.scrollTop = messages.scrollHeight;
@@ -1712,6 +1761,7 @@ function switchTab(el, tabId) {
   el.classList.add('active');
   document.querySelectorAll('.sp-body').forEach(b => b.style.display = 'none');
   document.getElementById(tabId).style.display = 'block';
+  if (tabId === 'tab-kb') kbLoadList();
 }
 
 function toggleSwitch(id) {
@@ -1745,9 +1795,99 @@ async function triggerReindex() {
 
 async function rebuildKb() {
   try {
-    await fetch(`${API_BASE}/admin/rebuild-kb`, { method: 'POST' });
-    alert('知识库重建已触发');
+    await fetch(`${API_BASE}/admin/reindex`, { method: 'POST' });
+    alert('索引重建已触发');
   } catch { alert('服务未就绪'); }
+}
+
+/* ── Knowledge Base Management ───────────────────────────────────────── */
+let _kbCurrentFile = null;
+
+async function kbLoadList() {
+  const listEl = document.getElementById('kbDocList');
+  const countEl = document.getElementById('kbDocCount');
+  try {
+    const r = await fetch(`${API_BASE}/kb/docs`);
+    const d = await r.json();
+    countEl.textContent = `${d.total} 个文档`;
+    if (d.docs.length === 0) {
+      listEl.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text-muted);font-size:12px">暂无文档，请上传 .md 文件</div>';
+      return;
+    }
+    listEl.innerHTML = d.docs.map(doc => {
+      const date = new Date(doc.updated).toLocaleDateString('zh-CN', {month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'});
+      const kb = (doc.size / 1024).toFixed(1);
+      return `<div class="kb-doc-item" onclick="kbOpenDoc('${doc.name}')">
+        <div style="display:flex;align-items:center;gap:8px;min-width:0">
+          <svg width="13" height="13" viewBox="0 0 13 13" fill="none" style="flex-shrink:0;opacity:.6"><path d="M2 1.5A1 1 0 0 1 3 .5h5.5L11 3v8.5a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1v-11Z" stroke="currentColor" stroke-width="1"/></svg>
+          <span style="font-size:12px;color:var(--text-bright);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${doc.name}</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;flex-shrink:0">
+          <span style="font-size:10px;color:var(--text-muted)">${kb}k</span>
+          <span style="font-size:10px;color:var(--text-muted)">${date}</span>
+          <button class="sp-btn" style="padding:2px 7px;font-size:10px" onclick="event.stopPropagation();kbDeleteDoc('${doc.name}')">删除</button>
+        </div>
+      </div>`;
+    }).join('');
+  } catch {
+    countEl.textContent = '离线';
+    listEl.innerHTML = '<div style="padding:20px;text-align:center;color:var(--fail);font-size:12px">API 未连接</div>';
+  }
+}
+
+async function kbOpenDoc(name) {
+  try {
+    const r = await fetch(`${API_BASE}/kb/docs/${encodeURIComponent(name)}`);
+    const d = await r.json();
+    _kbCurrentFile = name;
+    document.getElementById('kbPreviewTitle').textContent = name;
+    document.getElementById('kbPreviewContent').value = d.content;
+    document.getElementById('kbPreviewSection').style.display = '';
+  } catch { alert('读取失败'); }
+}
+
+async function kbSaveEdit() {
+  if (!_kbCurrentFile) return;
+  const content = document.getElementById('kbPreviewContent').value;
+  try {
+    const r = await fetch(`${API_BASE}/kb/docs/${encodeURIComponent(_kbCurrentFile)}`, {
+      method: 'PUT',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({content}),
+    });
+    if (!r.ok) throw new Error();
+    alert('已保存');
+    kbLoadList();
+  } catch { alert('保存失败'); }
+}
+
+function closeKbPreview() {
+  _kbCurrentFile = null;
+  document.getElementById('kbPreviewSection').style.display = 'none';
+  document.getElementById('kbPreviewContent').value = '';
+}
+
+async function kbDeleteDoc(name) {
+  if (!confirm(`确认删除 ${name}？`)) return;
+  try {
+    await fetch(`${API_BASE}/kb/docs/${encodeURIComponent(name)}`, { method: 'DELETE' });
+    if (_kbCurrentFile === name) closeKbPreview();
+    kbLoadList();
+  } catch { alert('删除失败'); }
+}
+
+async function kbUploadFile(input) {
+  const file = input.files[0];
+  if (!file) return;
+  const formData = new FormData();
+  formData.append('file', file);
+  try {
+    const r = await fetch(`${API_BASE}/kb/docs`, { method: 'POST', body: formData });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.detail || '上传失败');
+    input.value = '';
+    kbLoadList();
+  } catch(e) { alert(e.message || '上传失败'); }
 }
 
 function openAgentConfig(agentId) {
@@ -1926,23 +2066,35 @@ function renderMetrics(latency, intent, tokens) {
 
 function renderFeedback(traceId, query, sql, answer, intent) {
   const eid = 'fb-' + traceId.replace(/[^a-z0-9]/gi, '');
+  // 安全地把参数存到 data attribute，避免中文/引号破坏 onclick 内联字符串
   return `
-    <div class="feedback-bar" id="${eid}">
+    <div class="feedback-bar" id="${eid}"
+      data-trace="${escapeHtml(traceId)}"
+      data-query="${escapeHtml(query)}"
+      data-sql="${escapeHtml(sql || '')}"
+      data-answer="${escapeHtml(answer || '')}"
+      data-intent="${escapeHtml(intent || '')}">
       <span class="feedback-label">结果是否正确？</span>
-      <button class="feedback-btn correct" onclick="submitFeedback('${eid}','${traceId}',${JSON.stringify(query)},${JSON.stringify(sql||'')},${JSON.stringify(answer||'')},${JSON.stringify(intent||'')},true)">
+      <button class="feedback-btn correct" onclick="submitFeedback('${eid}', true)">
         <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M2 6l3 3 5-5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
         正确
       </button>
-      <button class="feedback-btn wrong" onclick="submitFeedback('${eid}','${traceId}',${JSON.stringify(query)},${JSON.stringify(sql||'')},${JSON.stringify(answer||'')},${JSON.stringify(intent||'')},false)">
+      <button class="feedback-btn wrong" onclick="submitFeedback('${eid}', false)">
         <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M2 2l8 8M10 2l-8 8" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
         有误
       </button>
     </div>`;
 }
 
-async function submitFeedback(eid, traceId, query, sql, answer, intent, correct) {
+async function submitFeedback(eid, correct) {
   const bar = document.getElementById(eid);
   if (!bar) return;
+  // 从 data attribute 取回原始参数
+  const traceId = bar.dataset.trace;
+  const query   = bar.dataset.query;
+  const sql     = bar.dataset.sql;
+  const answer  = bar.dataset.answer;
+  const intent  = bar.dataset.intent;
   // 标记按钮状态
   bar.querySelectorAll('.feedback-btn').forEach(b => b.classList.add('submitted'));
   const activeClass = correct ? 'correct' : 'wrong';
@@ -2111,7 +2263,12 @@ async function sendQuery() {
     agentMsg.appendChild(bodyEl);
 
     // Add to history sidebar
-    await addHistoryItem(text, 'ok', agentMsg);
+    await addHistoryItem(text, 'ok', agentMsg, {
+      traceId: data.trace_id,
+      sql: data.sql,
+      answer: data.answer,
+      intent: data.intent,
+    });
 
   } catch (err) {
     clearInterval(animInterval);
@@ -2203,7 +2360,7 @@ function getMockResult(query) {
 // msgNode 与 history-item 的对应表（最新在前，仅用于当前会话内滚动）
 const historyMsgNodes = [];
 
-async function addHistoryItem(text, status, msgNode) {
+async function addHistoryItem(text, status, msgNode, extra = {}) {
   // 若当前无会话，则创建一个新会话
   if (!currentSessionId) {
     currentSessionId = genId();
@@ -2218,6 +2375,11 @@ async function addHistoryItem(text, status, msgNode) {
   appendMessageToServer(currentSessionId, {
     query: text,
     html: msgNode ? msgNode.querySelector('.msg-body')?.innerHTML || '' : '',
+    // 保存结构化数据，用于重载时重新生成 feedback
+    traceId: extra?.traceId || null,
+    sql: extra?.sql || null,
+    answer: extra?.answer || null,
+    intent: extra?.intent || null,
     status,
     ts: Date.now(),
   });

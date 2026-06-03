@@ -9,8 +9,8 @@
 from typing import Dict, Any, List
 import re
 import logging
-from hello_agents.tools import Tool, ToolParameter, ToolResponse
-from hello_agents.tools.errors import ToolErrorCode
+from recon_core.tools import Tool, ToolParameter, ToolResponse
+from recon_core.tools.errors import ToolErrorCode
 
 logger = logging.getLogger(__name__)
 
@@ -263,7 +263,7 @@ class CodeFormatterTool(Tool):
 # ============================================
 
 if __name__ == "__main__":
-    from hello_agents import ToolRegistry
+    from recon_core import ToolRegistry
     
     # 1. 创建工具
     print("=== 创建代码格式化工具 ===")

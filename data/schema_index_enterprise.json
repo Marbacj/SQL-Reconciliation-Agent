@@ -1,0 +1,65 @@
+{
+  "db_path": "data/enterprise_mock.db",
+  "dialect": "sqlite",
+  "description": "企业级多业务模拟数据库，36张表，覆盖直播电商、用户、商品、营销、供应链、财务、客服、风控等业务域",
+  "built_at": 1780470000,
+  "table_count": 36,
+  "business_domains": {
+    "直播电商核心": [
+      "live_sessions",
+      "live_gmv",
+      "order_amount",
+      "settlements",
+      "refunds",
+      "commissions"
+    ],
+    "用户体系": [
+      "users",
+      "user_profiles",
+      "user_tags",
+      "user_login_logs"
+    ],
+    "商品中心": [
+      "products",
+      "product_categories",
+      "product_inventory",
+      "product_price_history"
+    ],
+    "营销活动": [
+      "campaigns",
+      "campaign_budgets",
+      "ad_spend",
+      "coupon_records"
+    ],
+    "供应链": [
+      "suppliers",
+      "purchase_orders",
+      "warehouses",
+      "logistics_records"
+    ],
+    "财务中心": [
+      "finance_bills",
+      "tax_records",
+      "bank_statements",
+      "cost_center_allocation"
+    ],
+    "客服系统": [
+      "complaints",
+      "complaint_followups",
+      "satisfaction_surveys"
+    ],
+    "平台运营": [
+      "anchor_contracts",
+      "anchor_performance",
+      "platform_rules"
+    ],
+    "风控": [
+      "risk_alerts",
+      "blacklist"
+    ],
+    "系统审计": [
+      "operation_logs",
+      "data_sync_tasks"
+    ]
+  }
+}

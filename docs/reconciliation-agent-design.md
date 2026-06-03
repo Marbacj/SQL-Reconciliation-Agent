@@ -82,7 +82,7 @@
 
 ```
 HelloAgents/
-├── hello_agents/
+├── recon_core/
 │   ├── tools/
 │   │   └── builtin/
 │   │       ├── sql_tool.py          ← NEW: SQL 生成 + 执行 + 校验
@@ -321,7 +321,7 @@ CREATE TABLE order_amount (
 | vLLM / 高并发 | `HelloAgentsLLM` 支持 `provider='vllm'` | "LLM 层抽象支持 DeepSeek/vLLM/Ollama，可切换本地部署降低延迟" |
 | 数据权限 | 工具层做 SQL 注入防护 + 可扩展 RBAC | "SQL 执行前过滤 DROP/DELETE/UPDATE 等危险操作" |
 | Streaming | `HelloAgentsLLM.invoke_stream()` | "工具调用结果是批量返回的，但 LLM 推理过程支持流式输出" |
-| MCP 协议 | `hello_agents/protocols/mcp/` 已实现 | "未来对接真实 Hive/ClickHouse 时，通过 MCP Server 暴露数据源" |
+| MCP 协议 | `recon_core/protocols/mcp/` 已实现 | "未来对接真实 Hive/ClickHouse 时，通过 MCP Server 暴露数据源" |
 
 ---
 

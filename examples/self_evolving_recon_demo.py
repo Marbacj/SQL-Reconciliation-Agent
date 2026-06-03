@@ -19,14 +19,14 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from dotenv import load_dotenv
 load_dotenv()
 
-from hello_agents.core.llm import HelloAgentsLLM
-from hello_agents.agents.reconciliation_agent import ReconciliationAgent
-from hello_agents.agents.plan_solve_recon_agent import ReconciliationPlanAndSolveAgent
-from hello_agents.tools.builtin.memory_tool import MemoryTool
-from hello_agents.tools.builtin.skill_reviewer import SkillReviewer
-from hello_agents.tools.builtin.case_store import CaseStore
-from hello_agents.tools.builtin.rag_retriever import TableDocRetriever
-from hello_agents.core.intent_router import IntentRouter
+from recon_core.core.llm import HelloAgentsLLM
+from recon_core.agents.reconciliation_agent import ReconciliationAgent
+from recon_core.agents.plan_solve_recon_agent import ReconciliationPlanAndSolveAgent
+from recon_core.tools.builtin.memory_tool import MemoryTool
+from recon_core.tools.builtin.skill_reviewer import SkillReviewer
+from recon_core.tools.builtin.case_store import CaseStore
+from recon_core.tools.builtin.rag_retriever import TableDocRetriever
+from recon_core.core.intent_router import IntentRouter
 
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))

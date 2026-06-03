@@ -19,9 +19,9 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from dotenv import load_dotenv
 load_dotenv()
 
-from hello_agents.core.llm import HelloAgentsLLM
-from hello_agents.core.config import Config
-from hello_agents.agents.reconciliation_agent import ReconciliationAgent
+from recon_core.core.llm import HelloAgentsLLM
+from recon_core.core.config import Config
+from recon_core.agents.reconciliation_agent import ReconciliationAgent
 
 
 def main():

@@ -7,12 +7,12 @@
 - 自定义技能创建
 """
 
-from hello_agents.skills import SkillLoader, Skill
-from hello_agents import ReActAgent, SimpleAgent
-from hello_agents.core.llm import HelloAgentsLLM
-from hello_agents.core.config import Config
-from hello_agents.tools.registry import ToolRegistry
-from hello_agents.tools.builtin.skill_tool import SkillTool
+from recon_core.skills import SkillLoader, Skill
+from recon_core import ReActAgent, SimpleAgent
+from recon_core.core.llm import HelloAgentsLLM
+from recon_core.core.config import Config
+from recon_core.tools.registry import ToolRegistry
+from recon_core.tools.builtin.skill_tool import SkillTool
 from pathlib import Path
 import tempfile
 # 加载环境变量

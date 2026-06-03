@@ -1,0 +1,66 @@
+{
+  "db_path": "data/production_mock.db",
+  "dialect": "sqlite",
+  "description": "生产级直播电商对账模拟数据库，含6张表，设计了8种差异模式",
+  "built_at": 1780469500,
+  "entries": [
+    {
+      "table_name": "live_sessions",
+      "doc_text": "live_sessions session_id anchor_name platform category live_date start_hour duration_min viewer_count status 直播场次 主播 平台 类目 抖音 快手 淘宝 日期 时间 主场 场次 场次主表",
+      "column_names": ["session_id", "anchor_name", "platform", "category", "live_date", "start_hour", "duration_min", "viewer_count", "status"],
+      "enum_summary": {
+        "platform": ["抖音", "快手", "淘宝直播", "视频号", "小红书"],
+        "status": ["completed"]
+      }
+    },
+    {
+      "table_name": "live_gmv",
+      "doc_text": "live_gmv id session_id gmv paid_gmv order_count report_time 直播GMV 成交额 销售额 交易额 gmv 收入 流水 场次gmv 实收",
+      "column_names": ["id", "session_id", "gmv", "paid_gmv", "order_count", "report_time"],
+      "enum_summary": {}
+    },
+    {
+      "table_name": "order_amount",
+      "doc_text": "order_amount id order_no session_id total_amount refund_amount net_amount order_date pay_channel order_status 订单 订单金额 支付金额 实付 退款 净额 支付宝 微信支付 银行卡 花呗 渠道 对账",
+      "column_names": ["id", "order_no", "session_id", "total_amount", "refund_amount", "net_amount", "order_date", "pay_channel", "order_status"],
+      "enum_summary": {
+        "pay_channel": ["支付宝", "微信支付", "银行卡", "花呗", "京东白条"],
+        "order_status": ["completed"]
+      }
+    },
+    {
+      "table_name": "settlements",
+      "doc_text": "settlements id session_id settle_amount platform_fee settle_date expected_date status note 结算 结算金额 打款 平台费 服务费 结算日期 超期 到账 财务",
+      "column_names": ["id", "session_id", "settle_amount", "platform_fee", "settle_date", "expected_date", "status", "note"],
+      "enum_summary": {
+        "status": ["pending", "settled", "disputed", "failed"]
+      }
+    },
+    {
+      "table_name": "refunds",
+      "doc_text": "refunds id order_no session_id refund_amount refund_date refund_reason status 退款 退单 退货 退款金额 退款原因 买家退款 质量问题",
+      "column_names": ["id", "order_no", "session_id", "refund_amount", "refund_date", "refund_reason", "status"],
+      "enum_summary": {
+        "status": ["success"]
+      }
+    },
+    {
+      "table_name": "commissions",
+      "doc_text": "commissions id session_id anchor_name commission_rate commission_amount base_gmv pay_date status 分佣 佣金 主播佣金 佣金比例 分成 提成 佣金金额 支付日期",
+      "column_names": ["id", "session_id", "anchor_name", "commission_rate", "commission_amount", "base_gmv", "pay_date", "status"],
+      "enum_summary": {
+        "status": ["paid", "disputed"]
+      }
+    }
+  ],
+  "anomaly_design": {
+    "D1": {"desc": "金额差异", "affected_sessions": "5个场次，order金额与GMV偏差>5%"},
+    "D2": {"desc": "数据缺失", "affected_sessions": "4个场次，GMV有记录但order_amount无"},
+    "D3": {"desc": "幽灵订单", "count": 3, "desc2": "order_amount中session_id=NULL的孤立订单"},
+    "D4": {"desc": "重复订单", "affected_sessions": "3个场次，同一session有2条order记录"},
+    "D5": {"desc": "超期结算", "affected_sessions": "6个场次，settle_date超过expected_date 8天以上"},
+    "D6": {"desc": "结算金额错误", "affected_sessions": "5个场次，settle_amount != gmv - platform_fee"},
+    "D7": {"desc": "退款未扣除", "affected_sessions": "4个场次，有退款记录但结算金额未减去退款"},
+    "D8": {"desc": "分佣比例异常", "affected_sessions": "5个场次，commission_rate > 30% GMV"}
+  }
+}

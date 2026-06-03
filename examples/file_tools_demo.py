@@ -4,9 +4,9 @@
 以及乐观锁机制的工作原理
 """
 
-from hello_agents.tools.builtin import ReadTool, WriteTool, EditTool, MultiEditTool
-from hello_agents.tools.registry import ToolRegistry
-from hello_agents.tools.response import ToolStatus
+from recon_core.tools.builtin import ReadTool, WriteTool, EditTool, MultiEditTool
+from recon_core.tools.registry import ToolRegistry
+from recon_core.tools.response import ToolStatus
 import tempfile
 from pathlib import Path
 # 加载环境变量

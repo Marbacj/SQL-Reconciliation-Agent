@@ -14,17 +14,17 @@ import tempfile
 from pathlib import Path
 from datetime import datetime
 
-from hello_agents.tools.builtin.devlog_tool import (
+from recon_core.tools.builtin.devlog_tool import (
     DevLogTool,
     DevLogEntry,
     DevLogStore,
     CATEGORIES
 )
-from hello_agents.tools.response import ToolResponse, ToolStatus
-from hello_agents.tools.errors import ToolErrorCode
-from hello_agents import ReActAgent, ToolRegistry
-from hello_agents.core.llm import HelloAgentsLLM
-from hello_agents.core.config import Config
+from recon_core.tools.response import ToolResponse, ToolStatus
+from recon_core.tools.errors import ToolErrorCode
+from recon_core import ReActAgent, ToolRegistry
+from recon_core.core.llm import HelloAgentsLLM
+from recon_core.core.config import Config
 from dotenv import load_dotenv
 load_dotenv()
 

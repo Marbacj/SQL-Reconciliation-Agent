@@ -9,8 +9,8 @@
 - 持久化支持断点恢复
 """
 
-from hello_agents import ReActAgent, HelloAgentsLLM, ToolRegistry, Config
-from hello_agents.tools.builtin import TodoWriteTool
+from recon_core import ReActAgent, HelloAgentsLLM, ToolRegistry, Config
+from recon_core.tools.builtin import TodoWriteTool
 from dotenv import load_dotenv
 
 load_dotenv()

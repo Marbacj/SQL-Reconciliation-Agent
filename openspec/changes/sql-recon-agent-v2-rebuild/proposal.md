@@ -4,7 +4,7 @@
 
 ## What Changes
 
-- **BREAKING**：废弃自研 HelloAgents 编排层（`hello_agents/agents/`、`hello_agents/core/`），改用 LangGraph StateGraph
+- **BREAKING**：废弃自研 HelloAgents 编排层（`recon_core/agents/`、`recon_core/core/`），改用 LangGraph StateGraph
 - **BREAKING**：Tool 系统从 `@tool_action` 反射魔法迁移至 Pydantic Schema 显式声明
 - **BREAKING**：SQL 安全护栏从字符串黑名单升级为 sqlglot AST 解析 + 白名单 verb
 - **BREAKING**：Memory 持久化从 JSON 文件迁移至 SQLite（带 promotion / consolidation / 衰减机制）
@@ -39,7 +39,7 @@
 ## Impact
 
 ### 受影响的代码
-- **归档至 `legacy/`**：`hello_agents/agents/`、`hello_agents/core/`、`hello_agents/tools/`、`examples/`
+- **归档至 `legacy/`**：`recon_core/agents/`、`recon_core/core/`、`recon_core/tools/`、`examples/`
 - **新增 `recon_v2/`**：core / orchestration / tools / memory / rag / evolution / infra / adapters
 - **新增 `apps/`**：cli / api / notebook
 - **新增 `tests/eval/`**：golden_set.jsonl / metrics.py / runner.py / reports/

@@ -19,7 +19,7 @@
 ### 1. 自动集成（零配置）
 
 ```python
-from hello_agents import ReActAgent, HelloAgentsLLM, Config
+from recon_core import ReActAgent, HelloAgentsLLM, Config
 
 # DevLogTool 默认启用
 config = Config(devlog_enabled=True)
@@ -32,7 +32,7 @@ agent.run("记录开发决策：使用 Redis 作为缓存")
 ### 2. 手动使用
 
 ```python
-from hello_agents.tools.builtin import DevLogTool
+from recon_core.tools.builtin import DevLogTool
 
 tool = DevLogTool(persistence_dir="memory/devlogs")
 

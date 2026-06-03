@@ -19,7 +19,7 @@
 
 ```python
 import asyncio
-from hello_agents import ReActAgent, HelloAgentsLLM
+from recon_core import ReActAgent, HelloAgentsLLM
 
 async def main():
     agent = ReActAgent("assistant", HelloAgentsLLM())
@@ -37,7 +37,7 @@ asyncio.run(main())
 ```python
 from fastapi import FastAPI
 from fastapi.responses import StreamingResponse
-from hello_agents import ReActAgent, HelloAgentsLLM
+from recon_core import ReActAgent, HelloAgentsLLM
 import asyncio
 
 app = FastAPI()
@@ -115,7 +115,7 @@ async def chat_stream(message: str):
 ### StreamEvent 数据结构
 
 ```python
-from hello_agents.core.streaming import StreamEvent, StreamEventType
+from recon_core.core.streaming import StreamEvent, StreamEventType
 
 event = StreamEvent(
     type=StreamEventType.LLM_CHUNK,
@@ -143,8 +143,8 @@ from fastapi import FastAPI, HTTPException
 from fastapi.responses import StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from hello_agents import ReActAgent, HelloAgentsLLM, ToolRegistry
-from hello_agents.tools.builtin import ReadTool, SearchTool
+from recon_core import ReActAgent, HelloAgentsLLM, ToolRegistry
+from recon_core.tools.builtin import ReadTool, SearchTool
 import asyncio
 
 app = FastAPI()
@@ -372,7 +372,7 @@ async def analyze_project():
   🔧 Search... ✅
 
 项目结构如下：
-- hello_agents/
+- recon_core/
   - core/
   - tools/
   - agents/
@@ -420,7 +420,7 @@ eventSource.addEventListener('LLM_CHUNK', (e) => {
 ```python
 from fastapi import FastAPI
 from fastapi.responses import StreamingResponse
-from hello_agents import ReActAgent, HelloAgentsLLM
+from recon_core import ReActAgent, HelloAgentsLLM
 import asyncio
 import uuid
 

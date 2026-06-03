@@ -9,9 +9,9 @@ Per the mock data generator:
 import os
 import pytest
 
-from hello_agents.tools.builtin.diff_tool import DiffTool
-from hello_agents.tools.registry import ToolRegistry
-from hello_agents.tools.response import ToolResponse, ToolStatus
+from recon_core.tools.builtin.diff_tool import DiffTool
+from recon_core.tools.registry import ToolRegistry
+from recon_core.tools.response import ToolResponse, ToolStatus
 
 
 DB_PATH = os.path.join(os.path.dirname(__file__), "..", "data", "mock_reconciliation.db")

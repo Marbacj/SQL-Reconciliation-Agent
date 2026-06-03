@@ -99,7 +99,7 @@ Agent 完整执行 7 步推理，正确识别 3 处故意注入的差异：
 ## 项目结构
 
 ```
-├── hello_agents/                  # 核心框架
+├── recon_core/                  # 核心框架
 │   ├── core/                      # Agent 基类 · LLM 抽象 · 流式推理
 │   ├── agents/                    # ReActAgent · ReconciliationAgent
 │   ├── tools/                     # 工具系统 · 注册表 · 熔断器

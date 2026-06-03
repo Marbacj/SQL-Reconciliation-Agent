@@ -68,8 +68,8 @@ tool_b: 正常运行 → 可用 🟢
 框架默认启用熔断器，无需任何配置：
 
 ```python
-from hello_agents import ToolRegistry, ReActAgent
-from hello_agents.llm import OpenAILLM
+from recon_core import ToolRegistry, ReActAgent
+from recon_core.llm import OpenAILLM
 
 # 创建 LLM
 llm = OpenAILLM(model="gpt-4")
@@ -99,9 +99,9 @@ result = agent.run("帮我完成任务")
 ### 方式 1：通过 Config 配置
 
 ```python
-from hello_agents.core.config import Config
-from hello_agents.tools.circuit_breaker import CircuitBreaker
-from hello_agents import ToolRegistry
+from recon_core.core.config import Config
+from recon_core.tools.circuit_breaker import CircuitBreaker
+from recon_core import ToolRegistry
 
 # 创建配置
 config = Config(
@@ -124,8 +124,8 @@ registry = ToolRegistry(circuit_breaker=cb)
 ### 方式 2：直接创建熔断器
 
 ```python
-from hello_agents.tools.circuit_breaker import CircuitBreaker
-from hello_agents import ToolRegistry
+from recon_core.tools.circuit_breaker import CircuitBreaker
+from recon_core import ToolRegistry
 
 # 自定义熔断器
 cb = CircuitBreaker(
@@ -140,15 +140,15 @@ registry = ToolRegistry(circuit_breaker=cb)
 ### 方式 3：禁用熔断器
 
 ```python
-from hello_agents.tools.circuit_breaker import CircuitBreaker
-from hello_agents import ToolRegistry
+from recon_core.tools.circuit_breaker import CircuitBreaker
+from recon_core import ToolRegistry
 
 # 禁用熔断器
 cb = CircuitBreaker(enabled=False)
 registry = ToolRegistry(circuit_breaker=cb)
 
 # 或者通过 Config
-from hello_agents.core.config import Config
+from recon_core.core.config import Config
 config = Config(circuit_enabled=False)
 ```
 

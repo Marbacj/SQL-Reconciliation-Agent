@@ -8,8 +8,8 @@
     5. ReAct 推理 (Thought→Action→Observation 循环)
 
 用法:
-    from hello_agents.agents.reconciliation_agent import ReconciliationAgent
-    from hello_agents.core.llm import HelloAgentsLLM
+    from recon_core.agents.reconciliation_agent import ReconciliationAgent
+    from recon_core.core.llm import HelloAgentsLLM
 
     llm = HelloAgentsLLM(provider="deepseek", model="deepseek-chat", ...)
     agent = ReconciliationAgent(

@@ -25,7 +25,7 @@
 ### 1. 自动历史压缩（简单摘要）
 
 ```python
-from hello_agents import ReActAgent, HelloAgentsLLM, Config
+from recon_core import ReActAgent, HelloAgentsLLM, Config
 
 # 配置历史压缩（默认：简单摘要）
 config = Config(
@@ -93,7 +93,7 @@ agent = ReActAgent("assistant", HelloAgentsLLM(), config=config)
 ### 2. 工具输出截断
 
 ```python
-from hello_agents import Config
+from recon_core import Config
 
 config = Config(
     tool_output_max_lines=2000,      # 最大行数
@@ -124,7 +124,7 @@ agent.run("读取大文件")
 
 **使用示例：**
 ```python
-from hello_agents.context import HistoryManager
+from recon_core.context import HistoryManager
 
 manager = HistoryManager(
     min_retain_rounds=10,
@@ -157,7 +157,7 @@ messages = manager.get_messages()
 
 **使用示例：**
 ```python
-from hello_agents.context import TokenCounter
+from recon_core.context import TokenCounter
 
 counter = TokenCounter(model="gpt-4")
 
@@ -211,7 +211,7 @@ def _should_compress(self):
 
 **使用示例：**
 ```python
-from hello_agents.context import ObservationTruncator
+from recon_core.context import ObservationTruncator
 
 truncator = ObservationTruncator(
     max_lines=2000,
@@ -246,7 +246,7 @@ result = truncator.truncate("search_tool", long_output)
 
 **新增功能：**
 ```python
-from hello_agents.core import Message
+from recon_core.core import Message
 
 # 支持 summary role
 msg = Message(role="summary", content="历史摘要...")
@@ -274,7 +274,7 @@ text = msg.to_text()
 ### Config 类扩展
 
 ```python
-from hello_agents import Config
+from recon_core import Config
 
 config = Config(
     # 上下文工程配置
@@ -392,7 +392,7 @@ config = Config(tool_output_truncate_direction="head_tail")
 ### 1. 智能摘要（可选）
 
 ```python
-from hello_agents import Config
+from recon_core import Config
 
 # 启用智能摘要（需要额外 LLM 调用）
 config = Config(

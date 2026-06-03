@@ -11,8 +11,8 @@
 """
 
 from typing import Dict, Any, List
-from hello_agents.tools import Tool, ToolParameter, ToolResponse
-from hello_agents.tools.errors import ToolErrorCode
+from recon_core.tools import Tool, ToolParameter, ToolResponse
+from recon_core.tools.errors import ToolErrorCode
 
 
 class SimpleToolTemplate(Tool):
@@ -135,7 +135,7 @@ class SimpleToolTemplate(Tool):
 # ============================================
 
 if __name__ == "__main__":
-    from hello_agents import ToolRegistry, ReActAgent, HelloAgentsLLM
+    from recon_core import ToolRegistry, ReActAgent, HelloAgentsLLM
     
     # 1. 创建工具实例
     tool = SimpleToolTemplate()

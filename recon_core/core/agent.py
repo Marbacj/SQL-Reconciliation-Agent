@@ -46,8 +46,8 @@ class Agent(ABC):
         self.tool_registry = tool_registry
 
         # 新增：上下文工程组件
-        from hello_agents.context.history import HistoryManager
-        from hello_agents.context.truncator import ObservationTruncator
+        from recon_core.context.history import HistoryManager
+        from recon_core.context.truncator import ObservationTruncator
 
         self.history_manager = HistoryManager(
             min_retain_rounds=self.config.min_retain_rounds,
@@ -67,7 +67,7 @@ class Agent(ABC):
         self._history_token_count = 0  # 缓存历史 Token 数
 
         # 新增：可观测性组件
-        from hello_agents.observability import TraceLogger
+        from recon_core.observability import TraceLogger
 
         self.trace_logger: Optional[TraceLogger] = None
         if self.config.trace_enabled:
@@ -88,7 +88,7 @@ class Agent(ABC):
 
         # 新增：Skills 知识外化组件
         from pathlib import Path
-        from hello_agents.skills import SkillLoader
+        from recon_core.skills import SkillLoader
 
         self.skill_loader: Optional[SkillLoader] = None
         if self.config.skills_enabled:
@@ -97,7 +97,7 @@ class Agent(ABC):
 
             # 自动注册 SkillTool
             if self.config.skills_auto_register and self.tool_registry:
-                from hello_agents.tools.builtin.skill_tool import SkillTool
+                from recon_core.tools.builtin.skill_tool import SkillTool
                 skill_tool = SkillTool(skill_loader=self.skill_loader)
                 self.tool_registry.register_tool(skill_tool)
 

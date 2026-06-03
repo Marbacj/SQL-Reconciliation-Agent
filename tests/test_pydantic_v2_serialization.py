@@ -4,9 +4,9 @@ import warnings
 
 from pydantic.warnings import PydanticDeprecatedSince20
 
-from hello_agents.core.config import Config
-from hello_agents.tools.base import Tool, ToolParameter
-from hello_agents.tools.response import ToolResponse
+from recon_core.core.config import Config
+from recon_core.tools.base import Tool, ToolParameter
+from recon_core.tools.response import ToolResponse
 
 
 class DemoTool(Tool):

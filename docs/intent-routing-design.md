@@ -155,10 +155,10 @@ IntentRouter.route("live_gmv 表有哪些字段？")
 
 | 文件 | 内容 |
 |------|------|
-| `hello_agents/core/intent.py` | Intent dataclass + IntentLabel |
-| `hello_agents/core/intent_registry.py` | IntentRegistry（注册 + 关键词匹配 + LLM 分类） |
-| `hello_agents/core/intent_router.py` | IntentRouter（分类 → 加载 → 过滤 → 注入） |
-| `hello_agents/agents/reconciliation_agent.py` | 集成 IntentRouter，替换硬编码 Prompt |
+| `recon_core/core/intent.py` | Intent dataclass + IntentLabel |
+| `recon_core/core/intent_registry.py` | IntentRegistry（注册 + 关键词匹配 + LLM 分类） |
+| `recon_core/core/intent_router.py` | IntentRouter（分类 → 加载 → 过滤 → 注入） |
+| `recon_core/agents/reconciliation_agent.py` | 集成 IntentRouter，替换硬编码 Prompt |
 | `examples/reconciliation_ui.py` | 侧边栏展示路由决策（命中哪个 Intent + 置信度） |
 
 ## 六、扩展性

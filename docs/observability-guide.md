@@ -19,7 +19,7 @@
 ### 1. 自动集成（零配置）
 
 ```python
-from hello_agents import ReActAgent, HelloAgentsLLM, Config
+from recon_core import ReActAgent, HelloAgentsLLM, Config
 
 # TraceLogger 默认启用
 config = Config(
@@ -109,7 +109,7 @@ TraceLogger 记录以下事件：
 ### 1. 手动使用 TraceLogger
 
 ```python
-from hello_agents.observability import TraceLogger
+from recon_core.observability import TraceLogger
 
 # 创建 logger
 logger = TraceLogger(
@@ -143,7 +143,7 @@ logger.finalize()
 ### 2. 配置选项
 
 ```python
-from hello_agents import Config
+from recon_core import Config
 
 config = Config(
     # 可观测性配置

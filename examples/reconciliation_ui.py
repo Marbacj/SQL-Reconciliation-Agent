@@ -24,10 +24,10 @@ from dotenv import load_dotenv
 
 load_dotenv(PROJECT_ROOT / ".env")
 
-from hello_agents.core.llm import HelloAgentsLLM
-from hello_agents.core.config import Config
-from hello_agents.agents.reconciliation_agent import ReconciliationAgent
-from hello_agents.tools.builtin.case_store import CaseStore
+from recon_core.core.llm import HelloAgentsLLM
+from recon_core.core.config import Config
+from recon_core.agents.reconciliation_agent import ReconciliationAgent
+from recon_core.tools.builtin.case_store import CaseStore
 
 # ── 页面配置 ──────────────────────────────────────────
 

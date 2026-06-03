@@ -2,11 +2,11 @@
 
 import pytest
 import time
-from hello_agents.tools.circuit_breaker import CircuitBreaker
-from hello_agents.tools.response import ToolResponse, ToolStatus
-from hello_agents.tools.errors import ToolErrorCode
-from hello_agents.tools.registry import ToolRegistry
-from hello_agents.tools.base import Tool
+from recon_core.tools.circuit_breaker import CircuitBreaker
+from recon_core.tools.response import ToolResponse, ToolStatus
+from recon_core.tools.errors import ToolErrorCode
+from recon_core.tools.registry import ToolRegistry
+from recon_core.tools.base import Tool
 
 
 class TestCircuitBreaker:
@@ -148,7 +148,7 @@ class DummyTool(Tool):
 
     def get_parameters(self):
         """返回工具参数定义"""
-        from hello_agents.tools.base import ToolParameter
+        from recon_core.tools.base import ToolParameter
         return [
             ToolParameter(
                 name="input",
@@ -266,8 +266,8 @@ class TestCircuitBreakerWithConfig:
 
     def test_config_integration(self):
         """测试通过 Config 配置熔断器参数"""
-        from hello_agents.core.config import Config
-        from hello_agents.tools.circuit_breaker import CircuitBreaker
+        from recon_core.core.config import Config
+        from recon_core.tools.circuit_breaker import CircuitBreaker
 
         config = Config(
             circuit_enabled=True,
@@ -287,8 +287,8 @@ class TestCircuitBreakerWithConfig:
 
     def test_disabled_via_config(self):
         """测试通过 Config 禁用熔断器"""
-        from hello_agents.core.config import Config
-        from hello_agents.tools.circuit_breaker import CircuitBreaker
+        from recon_core.core.config import Config
+        from recon_core.tools.circuit_breaker import CircuitBreaker
 
         config = Config(circuit_enabled=False)
 

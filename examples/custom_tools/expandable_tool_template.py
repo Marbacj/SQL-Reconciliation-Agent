@@ -17,8 +17,8 @@
 
 from typing import Dict, Any, List
 import logging
-from hello_agents.tools import Tool, tool_action, ToolParameter, ToolResponse
-from hello_agents.tools.errors import ToolErrorCode
+from recon_core.tools import Tool, tool_action, ToolParameter, ToolResponse
+from recon_core.tools.errors import ToolErrorCode
 
 logger = logging.getLogger(__name__)
 
@@ -251,7 +251,7 @@ class ExpandableToolTemplate(Tool):
 # ============================================
 
 if __name__ == "__main__":
-    from hello_agents import ToolRegistry
+    from recon_core import ToolRegistry
 
     # 1. 创建可展开工具
     print("=== 创建可展开工具 ===")

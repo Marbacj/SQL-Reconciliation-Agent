@@ -4,8 +4,8 @@
 """
 
 import pytest
-from hello_agents.tools import Tool, ToolParameter, ToolResponse, ToolRegistry
-from hello_agents.tools.errors import ToolErrorCode
+from recon_core.tools import Tool, ToolParameter, ToolResponse, ToolRegistry
+from recon_core.tools.errors import ToolErrorCode
 
 
 # ============================================
@@ -191,7 +191,7 @@ class TestExpandableTools:
     
     def test_expandable_tool_registration(self):
         """测试可展开工具的注册"""
-        from hello_agents.tools import tool_action
+        from recon_core.tools import tool_action
         
         class MultiTool(Tool):
             def __init__(self):

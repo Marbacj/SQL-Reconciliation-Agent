@@ -4,7 +4,7 @@
     # 跑 v2（默认 stub adapter）
     python -m tests.eval.runner --target v2 --db data/eval_data.sqlite
 
-    # 跑 v1 baseline（接入 legacy hello_agents.ReconciliationAgent）
+    # 跑 v1 baseline（接入 legacy recon_core.ReconciliationAgent）
     python -m tests.eval.runner --target v1 --db data/eval_data.sqlite
 
     # 对比
@@ -82,7 +82,7 @@ class StubAdapter:
         )
 
 
-# ---------- V1：legacy hello_agents 适配 ----------
+# ---------- V1：legacy recon_core 适配 ----------
 
 
 class V1Adapter:
@@ -91,7 +91,7 @@ class V1Adapter:
     def __init__(self):
         # 延迟 import，避免 v1 缺依赖时直接挂掉
         try:
-            from hello_agents.agents.reconciliation_agent import ReconciliationAgent  # type: ignore
+            from recon_core.agents.reconciliation_agent import ReconciliationAgent  # type: ignore
 
             self._agent_cls = ReconciliationAgent
             self._agent = None
