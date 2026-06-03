@@ -21,8 +21,8 @@ from typing import Dict, Any, List, Optional
 import logging
 import time
 import asyncio
-from hello_agents.tools import Tool, ToolParameter, ToolResponse
-from hello_agents.tools.errors import ToolErrorCode
+from recon_core.tools import Tool, ToolParameter, ToolResponse
+from recon_core.tools.errors import ToolErrorCode
 
 # 配置日志
 logger = logging.getLogger(__name__)
@@ -329,7 +329,7 @@ class AdvancedToolTemplate(Tool):
 
 if __name__ == "__main__":
     import logging
-    from hello_agents import ToolRegistry
+    from recon_core import ToolRegistry
 
     # 配置日志
     logging.basicConfig(

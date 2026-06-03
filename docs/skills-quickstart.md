@@ -42,8 +42,8 @@ $ARGUMENTS
 ### 3. 使用 Agent
 
 ```python
-from hello_agents import ReActAgent, HelloAgentsLLM
-from hello_agents.tools import ToolRegistry
+from recon_core import ReActAgent, HelloAgentsLLM
+from recon_core.tools import ToolRegistry
 
 # 创建 Agent（自动检测 skills/ 目录）
 agent = ReActAgent(
@@ -109,7 +109,7 @@ $ARGUMENTS
 ## 配置选项
 
 ```python
-from hello_agents import Config
+from recon_core import Config
 
 config = Config(
     skills_enabled=True,           # 是否启用（默认 True）

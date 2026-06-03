@@ -6,6 +6,7 @@
 <title>文档中心 — ReconAgent</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500;9..40,600&family=DM+Mono:wght@400;500&family=Noto+Sans+SC:wght@300;400;500&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
 <style>
 :root {
   --bg-base:     oklch(12% 0.008 250);
@@ -420,6 +421,22 @@ header {
 .ov-title { font-size: 14px; font-weight: 600; color: var(--text-bright); margin-bottom: 4px; }
 .ov-desc  { font-size: 12px; color: var(--text-muted); line-height: 1.5; }
 
+/* ── Mermaid diagrams ── */
+.mermaid-wrap {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-dim);
+  border-radius: var(--radius-lg);
+  padding: 20px 16px;
+  margin: 14px 0;
+  overflow-x: auto;
+}
+.mermaid-wrap .mermaid svg {
+  max-width: 100%;
+  height: auto;
+  display: block;
+  margin: 0 auto;
+}
+
 @media (max-width: 700px) {
   .sidebar { display: none; }
   .toc-rail { display: none; }
@@ -465,6 +482,17 @@ header {
         <rect x="9.5" y="9.5" width="5" height="5" rx="1" stroke="currentColor" stroke-width="1.3"/>
       </svg>
       文档总览
+    </div>
+
+    <div class="sidebar-section-label">入门</div>
+    <div class="nav-item" onclick="showDoc('onboarding')">
+      <svg class="nav-item-icon" viewBox="0 0 16 16" fill="none">
+        <path d="M3 2h7l3 3v9H3V2z" stroke="currentColor" stroke-width="1.3"/>
+        <path d="M10 2v3h3" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/>
+        <path d="M5 8h6M5 11h4" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>
+      </svg>
+      开发者指引
+      <span class="nav-badge">NEW</span>
     </div>
 
     <div class="sidebar-section-label">核心专题</div>
@@ -579,6 +607,17 @@ header {
           <div class="ov-title">Subagent 体系</div>
           <div class="ov-desc">SQL生成/反思/Skill审查三专职Agent协同</div>
         </div>
+        <div class="overview-card" onclick="showDoc('onboarding')">
+          <div class="ov-icon">
+            <svg width="18" height="18" viewBox="0 0 16 16" fill="none">
+              <path d="M3 2h7l3 3v9H3V2z" stroke="var(--accent)" stroke-width="1.3"/>
+              <path d="M10 2v3h3" stroke="var(--accent)" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/>
+              <path d="M5 8h6M5 11h4" stroke="var(--accent)" stroke-width="1.2" stroke-linecap="round"/>
+            </svg>
+          </div>
+          <div class="ov-title">开发者指引</div>
+          <div class="ov-desc">仓库结构、本地环境搭建、数据库设计速览</div>
+        </div>
         <div class="overview-card" onclick="showDoc('evolution')">
           <div class="ov-icon">
             <svg width="18" height="18" viewBox="0 0 16 16" fill="none">
@@ -595,6 +634,177 @@ header {
       </div>
     </div>
 
+    <!-- ONBOARDING -->
+    <div class="doc-panel" id="panel-onboarding">
+      <div class="doc-header">
+        <div class="doc-tag">入门</div>
+        <h1 class="doc-title">开发者指引</h1>
+        <p class="doc-desc">面向初次接触 ReconAgent 的技术同学，帮你在 30 分钟内看懂仓库结构、核心模块与数据库设计。</p>
+      </div>
+      <hr class="doc-divider">
+
+      <div class="section">
+        <h2 class="section-title">仓库目录结构</h2>
+        <div class="prose"><p>整个项目按「层」组织：Agent 逻辑在 <code style="font-family:'DM Mono',monospace;font-size:12.5px;color:var(--accent)">recon_core/</code>，HTTP 服务在 <code style="font-family:'DM Mono',monospace;font-size:12.5px;color:var(--accent)">apps/</code>，数据与索引在 <code style="font-family:'DM Mono',monospace;font-size:12.5px;color:var(--accent)">data/</code>。</p></div>
+        <div class="code-block">ReconCore-SQL-Reconciliation-Agent/
+├── recon_core/          <span class="cm"># 核心框架层</span>
+│   ├── agents/            <span class="cm"># Agent 定义（ReconAgent 主体在此）</span>
+│   ├── tools/             <span class="cm"># 工具集（SQLTool / RAGRetriever 等）</span>
+│   │   └── builtin/       <span class="cm"># 内置工具实现</span>
+│   ├── context/           <span class="cm"># GraphState 与上下文管理</span>
+│   ├── core/              <span class="cm"># LangGraph DAG 编排核心</span>
+│   ├── skills/            <span class="cm"># Skill 加载与生命周期</span>
+│   └── observability/     <span class="cm"># 可观测性（链路追踪、日志）</span>
+│
+├── apps/
+│   └── ui/                <span class="cm"># 前端页面（纯 HTML / JS）</span>
+│       ├── index.html     <span class="cm"># 控制台主界面</span>
+│       ├── docs.html      <span class="cm"># 本文档页</span>
+│       └── landing.html   <span class="cm"># 产品介绍落地页</span>
+│
+├── data/                  <span class="cm"># 数据层</span>
+│   ├── enterprise_mock.db <span class="cm"># 企业级模拟库（36张表，9000+行）</span>
+│   ├── production_mock.db <span class="cm"># 生产级模拟库（6张表，带8种差异）</span>
+│   ├── eval_data.sqlite   <span class="cm"># 评测数据集</span>
+│   ├── schema_index*.json <span class="cm"># Schema RAG 索引</span>
+│   └── generate_*.py      <span class="cm"># 数据生成脚本</span>
+│
+├── knowledge_base/        <span class="cm"># RAG 知识库（Markdown 文档）</span>
+├── memory_store/          <span class="cm"># 记忆持久化（SQLite）</span>
+├── skill_library/         <span class="cm"># Subagent / Skill 定义（.md）</span>
+├── recon_cases/           <span class="cm"># 历史对账案例（few-shot）</span>
+└── tests/                 <span class="cm"># 单元 / 集成测试</span></div>
+      </div>
+
+      <div class="section">
+        <h2 class="section-title">核心模块关系</h2>
+        <div class="arch-diagram">用户自然语言问题
+       │
+       ▼
+┌─────────────────────────────────────────────────┐
+│  FastAPI  (apps/ui → apps/api)                   │
+│  POST /query  /  GET /sessions                   │
+└───────────────────┬─────────────────────────────┘
+                    │
+                    ▼
+┌─────────────────────────────────────────────────┐
+│  ReconAgent  (recon_core/agents/)              │
+│                                                  │
+│  plan ─► parallel_act ─► observe ─► reflect ─► end│
+│     │          │              │                  │
+│  Schema     SQLTool       RangeGuard             │
+│  Linker    (RAG辅助)     错误反馈闭环             │
+└─────────────────────────────────────────────────┘
+                    │
+        ┌───────────┼───────────┐
+        ▼           ▼           ▼
+   SQLite DB    BM25 Index   Memory Store
+  (data/*.db)  (schema_index) (memory_store/)</div>
+      </div>
+
+      <div class="section">
+        <h2 class="section-title">数据库说明：两套模拟库</h2>
+        <div class="prose"><p>项目提供两套 SQLite 模拟数据库，用途不同，按需选择：</p></div>
+        <div class="doc-table-wrap">
+          <table class="doc-table">
+            <thead><tr><th>数据库文件</th><th>规模</th><th>设计目的</th><th>使用建议</th></tr></thead>
+            <tbody>
+              <tr><td>production_mock.db</td><td>6 表 / ~1000 行</td><td>植入 8 种差异（金额差、缺失、重复、超期等），验证对账能力</td><td>快速跑通 Agent 对账流程</td></tr>
+              <tr><td>enterprise_mock.db</td><td>36 表 / 9000+ 行</td><td>覆盖用户、商品、营销、财务等多业务噪音，测试 Schema Linking</td><td>评估 Agent 在真实生产噪音下的表定位能力</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="callout">两套库均由 <code style="font-family:'DM Mono',monospace;font-size:12px">data/generate_*.py</code> 脚本生成，可随时重建。每次生成会打印差异分布，方便核查。</div>
+        <div class="callout fail" style="margin-top:10px">
+          <strong>免责声明</strong> — 本项目所有数据表（含字段名、表名、业务逻辑）均为模拟数据，系参考同类开源项目的通用数据模型或由 AI 自动生成，不代表任何真实公司、平台或产品的实际数据结构。数据内容（主播名称、金额、订单号等）全部为随机生成的虚构信息，不涉及任何真实业务数据，仅供学习与演示使用。
+        </div>
+      </div>
+
+      <div class="section">
+        <h2 class="section-title">enterprise_mock.db 业务域速览</h2>
+        <div class="doc-table-wrap">
+          <table class="doc-table">
+            <thead><tr><th>业务域</th><th>表（数量）</th><th>典型表名</th></tr></thead>
+            <tbody>
+              <tr><td>直播电商核心</td><td>6</td><td>live_sessions / live_gmv / order_amount / settlements / refunds / commissions</td></tr>
+              <tr><td>用户体系</td><td>4</td><td>users / user_profiles / user_tags / user_login_logs</td></tr>
+              <tr><td>商品中心</td><td>4</td><td>products / product_categories / product_inventory / product_price_history</td></tr>
+              <tr><td>营销活动</td><td>4</td><td>campaigns / ad_spend / campaign_budgets / coupon_records</td></tr>
+              <tr><td>供应链</td><td>4</td><td>suppliers / purchase_orders / warehouses / logistics_records</td></tr>
+              <tr><td>财务中心</td><td>4</td><td>finance_bills / bank_statements / tax_records / cost_center_allocation</td></tr>
+              <tr><td>客服系统</td><td>3</td><td>complaints / complaint_followups / satisfaction_surveys</td></tr>
+              <tr><td>平台运营</td><td>3</td><td>anchor_contracts / anchor_performance / platform_rules</td></tr>
+              <tr><td>风控</td><td>2</td><td>risk_alerts / blacklist</td></tr>
+              <tr><td>系统审计</td><td>2</td><td>operation_logs / data_sync_tasks</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="section">
+        <h2 class="section-title">对账差异类型速查</h2>
+        <div class="prose"><p>production_mock.db 和 enterprise_mock.db 均在直播电商核心表中植入了 8 种差异，Agent 对账时可验证这些问题是否被发现：</p></div>
+        <div class="doc-table-wrap">
+          <table class="doc-table">
+            <thead><tr><th>差异代号</th><th>类型</th><th>描述</th><th>涉及表</th></tr></thead>
+            <tbody>
+              <tr><td>D1</td><td>金额差异</td><td>order 金额与 GMV 偏差 &gt; 5%</td><td>live_gmv ↔ order_amount</td></tr>
+              <tr><td>D2</td><td>数据缺失</td><td>GMV 有记录，订单表无对应数据</td><td>live_gmv ↔ order_amount</td></tr>
+              <tr><td>D3</td><td>幽灵订单</td><td>session_id = NULL 的孤立订单</td><td>order_amount</td></tr>
+              <tr><td>D4</td><td>重复订单</td><td>同一 session 有 2 条 order 记录</td><td>order_amount</td></tr>
+              <tr><td>D5</td><td>超期结算</td><td>settle_date 超过 expected_date 超 8 天</td><td>settlements</td></tr>
+              <tr><td>D6</td><td>结算金额错</td><td>settle_amount ≠ gmv − platform_fee</td><td>settlements</td></tr>
+              <tr><td>D7</td><td>退款未扣除</td><td>有退款记录但结算金额未减去退款</td><td>settlements ↔ refunds</td></tr>
+              <tr><td>D8</td><td>分佣比例异常</td><td>commission_rate &gt; 30% GMV</td><td>commissions</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="section">
+        <h2 class="section-title">工具层：SQLTool 的三个子工具</h2>
+        <div class="prose"><p><code style="font-family:'DM Mono',monospace;font-size:12.5px;color:var(--accent)">recon_core/tools/builtin/sql_tool.py</code> 是 Agent 与数据库交互的唯一入口，对外展开为三个子工具：</p></div>
+        <div class="doc-table-wrap">
+          <table class="doc-table">
+            <thead><tr><th>子工具名</th><th>作用</th><th>典型调用场景</th></tr></thead>
+            <tbody>
+              <tr><td>sql_schema</td><td>查询指定表的字段列表、类型和前 3 行示例数据</td><td>Agent 做 Schema Linking 时主动探查表结构</td></tr>
+              <tr><td>sql_execute</td><td>执行 SELECT 语句，返回最多 50 行 Markdown 表格</td><td>执行对账 SQL 获取结果</td></tr>
+              <tr><td>sql_validate</td><td>用 SQLite EXPLAIN 做语法校验，不实际执行</td><td>执行前预检 SQL 合法性</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="callout fail">所有子工具均拒绝 DROP / DELETE / UPDATE / INSERT / ALTER / CREATE，仅允许只读操作。</div>
+      </div>
+
+      <div class="section">
+        <h2 class="section-title">接入新数据库（配置方式）</h2>
+        <div class="prose"><p>切换 Agent 使用的数据库只需两步：</p></div>
+        <div class="code-block"><span class="cm"># 1. 实例化 SQLTool 时指向目标数据库</span>
+<span class="kw">from</span> recon_core.tools.builtin.sql_tool <span class="kw">import</span> SQLTool
+
+tool = SQLTool(db_path=<span class="str">"data/enterprise_mock.db"</span>)
+registry.register_tool(tool)  <span class="cm"># 自动展开为 sql_schema / sql_execute / sql_validate</span>
+
+<span class="cm"># 2. 更新 schema_index 让 RAG 检索到正确表</span>
+<span class="cm"># 将 schema_index_enterprise.json 的路径写入 RAGRetriever 配置即可</span></div>
+        <div class="callout ok">重新生成数据库后记得同步更新 schema_index.json，否则 Agent Schema Linking 会查到旧索引。</div>
+      </div>
+
+      <div class="section">
+        <h2 class="section-title">典型对账问题示例</h2>
+        <div class="prose"><p>以下是向 Agent 提问的参考问题，可用于验证各差异类型是否被正确检测：</p></div>
+        <div class="card-grid">
+          <div class="mini-card"><div class="mini-card-title">D1 / D2 验证</div><div class="mini-card-desc">「帮我找出直播 GMV 和订单金额差异超过 5% 的场次」</div></div>
+          <div class="mini-card"><div class="mini-card-title">D3 / D4 验证</div><div class="mini-card-desc">「哪些订单的 session_id 为空，或同一场次有重复订单？」</div></div>
+          <div class="mini-card"><div class="mini-card-title">D5 / D6 验证</div><div class="mini-card-desc">「列出结算超期或结算金额计算错误的场次」</div></div>
+          <div class="mini-card"><div class="mini-card-title">D7 验证</div><div class="mini-card-desc">「哪些场次有退款记录但结算金额没有扣除？」</div></div>
+          <div class="mini-card"><div class="mini-card-title">D8 验证</div><div class="mini-card-desc">「找出分佣比例超过 30% 的异常场次」</div></div>
+          <div class="mini-card"><div class="mini-card-title">跨域挑战</div><div class="mini-card-desc">「找出被风控标记过的主播，其 GMV 是否存在异常？」</div></div>
+        </div>
+      </div>
+    </div>
+
     <!-- ARCHITECTURE -->
     <div class="doc-panel" id="panel-arch">
       <div class="doc-header">
@@ -606,18 +816,22 @@ header {
 
       <div class="section">
         <h2 class="section-title">整体分层</h2>
-        <div class="arch-diagram">┌─────────────────────────────────────────────┐
-│              用户 / 控制台 UI               │
-├─────────────────────────────────────────────┤
-│           FastAPI  HTTP / SSE 层            │
-├──────────────┬──────────────────────────────┤
-│  LangGraph   │  ReconAgent DAG              │
-│  Orchestrator│  plan → act → observe → end  │
-├──────────────┴──────────────────────────────┤
-│  工具层  SQL Executor · Schema Linker · RAG │
-├─────────────────────────────────────────────┤
-│  存储层  SQLite · BM25 Index · Memory Store │
-└─────────────────────────────────────────────┘</div>
+        <div class="mermaid-wrap">
+<pre class="mermaid">
+flowchart TB
+  UI["用户 / 控制台 UI"]
+  API["FastAPI  HTTP / SSE 层"]
+  DAG["LangGraph — ReconAgent DAG\nplan → parallel_act → observe → reflect → end"]
+  TOOL["工具层：SQL Executor · Schema Linker · RAG"]
+  STORE["存储层：SQLite · BM25 Index · Memory Store"]
+  UI --> API --> DAG --> TOOL --> STORE
+  style UI    fill:#1e2230,stroke:#3d4460,color:#e0e4f0
+  style API   fill:#1e2230,stroke:#3d4460,color:#e0e4f0
+  style DAG   fill:#1e2230,stroke:#c8923a,color:#e0e4f0
+  style TOOL  fill:#1e2230,stroke:#3d4460,color:#e0e4f0
+  style STORE fill:#1e2230,stroke:#3d4460,color:#e0e4f0
+</pre>
+        </div>
       </div>
 
       <div class="section">
@@ -647,19 +861,26 @@ header {
 
       <div class="section">
         <h2 class="section-title">数据流示意</h2>
-        <div class="arch-diagram">用户输入 "比较 A/B 表 6 月差异"
-   │
-   ▼ plan 节点
-   [查询 table_A 6月, 查询 table_B 6月]
-   │
-   ▼ parallel_act（asyncio.gather）
-   [result_A, result_B]
-   │
-   ▼ observe 节点
-   差异 = result_A - result_B → 异常检测
-   │
-   ▼ reflect（如有异常）→ end
-   生成对账报告</div>
+        <div class="mermaid-wrap">
+<pre class="mermaid">
+flowchart LR
+  Q["用户输入\n比较 A/B 表 6 月差异"] --> P["plan 节点"]
+  P --> A["查询 table_A 6月"]
+  P --> B["查询 table_B 6月"]
+  A --> OB["observe 节点\n差异检测 + Range Guard"]
+  B --> OB
+  OB -- 有异常 --> RF["reflect 节点"]
+  OB -- 无异常 --> END["end\n生成对账报告"]
+  RF --> END
+  style Q fill:#1e2230,stroke:#3d4460,color:#e0e4f0
+  style P fill:#1e2230,stroke:#c8923a,color:#e0e4f0
+  style OB fill:#1e2230,stroke:#c8923a,color:#e0e4f0
+  style RF fill:#1e2230,stroke:#c8923a,color:#e0e4f0
+  style END fill:#1e2230,stroke:#3d7a55,color:#e0e4f0
+  style A fill:#1e2230,stroke:#3d4460,color:#e0e4f0
+  style B fill:#1e2230,stroke:#3d4460,color:#e0e4f0
+</pre>
+        </div>
       </div>
 
       <div class="section">
@@ -674,13 +895,19 @@ header {
       </div>
 
       <div class="section">
-        <h2 class="section-title">ADR 索引</h2>
-        <div class="card-grid">
-          <div class="mini-card"><div class="mini-card-title">ADR-001</div><div class="mini-card-desc">选择 LangGraph — 状态显式、易调试</div></div>
-          <div class="mini-card"><div class="mini-card-title">ADR-002</div><div class="mini-card-desc">Hybrid RAG — BM25 + 向量互补</div></div>
-          <div class="mini-card"><div class="mini-card-title">ADR-003</div><div class="mini-card-desc">三层记忆 — Working / Episodic / Semantic</div></div>
-          <div class="mini-card"><div class="mini-card-title">ADR-004</div><div class="mini-card-desc">三门沙盒 — SQL 安全执行防护</div></div>
-          <div class="mini-card"><div class="mini-card-title">ADR-005</div><div class="mini-card-desc">SQLGlot 静态安全检查</div></div>
+        <h2 class="section-title">架构决策记录（ADR）</h2>
+        <div class="prose"><p>以下是项目关键架构决策的摘要。每条决策均包含选型背景与被否决的替代方案。</p></div>
+        <div class="doc-table-wrap">
+          <table class="doc-table">
+            <thead><tr><th>编号</th><th>决策</th><th>选型理由</th><th>被否决的替代方案</th></tr></thead>
+            <tbody>
+              <tr><td>ADR-001</td><td>选择 LangGraph 作为 Agent 编排框架</td><td>状态显式传递，每步可观测、可回滚；相比 AutoGen 更适合有确定 DAG 拓扑的对账场景</td><td>AutoGen（隐式状态难调试）、纯 LangChain Chain（不支持条件分支）</td></tr>
+              <tr><td>ADR-002</td><td>采用 BM25 + 向量 Hybrid RAG</td><td>BM25 处理精确表名/字段名匹配，向量检索覆盖语义同义词；单用任一方均有盲区</td><td>纯向量 RAG（精确词命中率低）、纯 BM25（语义泛化弱）</td></tr>
+              <tr><td>ADR-003</td><td>三层记忆：Working / Episodic / Semantic</td><td>对账场景有明确的短/中/长期记忆需求；Episodic 提供 few-shot 案例，Semantic 持久化规则</td><td>单一 SQLite 表存所有记忆（无法按生命周期管理）</td></tr>
+              <tr><td>ADR-004</td><td>三层 SQL 安全防护（意图 + AST + 白名单）</td><td>字符串黑名单易被绕过；AST 检查语法树层面拦截；白名单限制爆炸半径</td><td>仅正则过滤 DDL 关键词（容易被注释或大小写绕过）</td></tr>
+              <tr><td>ADR-005</td><td>使用 SQLGlot 做静态 AST 安全检查</td><td>支持多方言、可扩展、纯 Python 无额外依赖；EXPLAIN 只捕运行时错误，无法识别危险语义</td><td>sqlite3 EXPLAIN（仅校验语法，不识别危险操作类型）</td></tr>
+            </tbody>
+          </table>
         </div>
       </div>
     </div>
@@ -696,27 +923,20 @@ header {
 
       <div class="section">
         <h2 class="section-title">三层防护体系</h2>
-        <div class="arch-diagram">用户自然语言
-      │
-      ▼
-┌─────────────────────┐
-│  Layer 1: 意图过滤   │  关键词黑名单、意图分类
-└──────────┬──────────┘
-           │
-           ▼
-┌─────────────────────┐
-│  Layer 2: AST 静态  │  SQLGlot 解析，禁止 DDL/DML
-│  安全检查            │
-└──────────┬──────────┘
-           │
-           ▼
-┌─────────────────────┐
-│  Layer 3: 运行时     │  表级 / 字段级白名单
-│  权限过滤            │
-└──────────┬──────────┘
-           │
-           ▼
-        执行 SQL</div>
+        <div class="mermaid-wrap">
+<pre class="mermaid">
+flowchart TD
+  NL["用户自然语言"] --> L1["Layer 1：意图过滤\n关键词黑名单、意图分类"]
+  L1 --> L2["Layer 2：AST 静态安全检查\nSQLGlot 解析，禁止 DDL/DML"]
+  L2 --> L3["Layer 3：运行时权限过滤\n表级 / 字段级白名单"]
+  L3 --> SQL["执行 SQL"]
+  style NL  fill:#1e2230,stroke:#3d4460,color:#e0e4f0
+  style L1  fill:#1e2230,stroke:#c8923a,color:#e0e4f0
+  style L2  fill:#1e2230,stroke:#c8923a,color:#e0e4f0
+  style L3  fill:#1e2230,stroke:#c8923a,color:#e0e4f0
+  style SQL fill:#1e2230,stroke:#3d7a55,color:#e0e4f0
+</pre>
+        </div>
       </div>
 
       <div class="section">
@@ -766,14 +986,21 @@ FORBIDDEN = {
 
       <div class="section">
         <h2 class="section-title">自我修正闭环</h2>
-        <div class="arch-diagram">SQL 执行失败
-      │
-      ▼ observe 节点捕获 last_sql_error
-      obs_count += 1
-      │
-      ▼ route: obs_count &lt; MAX_RETRY?
-      是 → reflect 携带错误重新生成 SQL
-      否 → 降级：返回"无法完成，请简化问题"</div>
+        <div class="mermaid-wrap">
+<pre class="mermaid">
+flowchart TD
+  FAIL["SQL 执行失败"] --> OBS["observe 节点\nlast_sql_error 捕获\nobs_count += 1"]
+  OBS --> ROUTE{obs_count &lt; MAX_RETRY?}
+  ROUTE -- 是 --> RF["reflect 节点\n携带错误重新生成 SQL"]
+  ROUTE -- 否 --> FALLBACK["降级：返回'无法完成，请简化问题'"]
+  RF --> FAIL
+  style FAIL     fill:#1e2230,stroke:#b84040,color:#e0e4f0
+  style OBS      fill:#1e2230,stroke:#c8923a,color:#e0e4f0
+  style ROUTE    fill:#1e2230,stroke:#3d4460,color:#e0e4f0
+  style RF       fill:#1e2230,stroke:#c8923a,color:#e0e4f0
+  style FALLBACK fill:#1e2230,stroke:#3d4460,color:#8090a0
+</pre>
+        </div>
         <div class="callout fail">权限错误不进入重试循环，避免 LLM 反复尝试绕过限制。</div>
       </div>
     </div>
@@ -804,13 +1031,23 @@ FORBIDDEN = {
 
       <div class="section">
         <h2 class="section-title">Hybrid 融合架构</h2>
-        <div class="arch-diagram">用户问题
-    │
-    ├─► BM25 检索  ──►┐
-    │                  ├─► RRF 融合排序 ──► Top-K ──► 注入 Prompt
-    └─► 向量检索  ──►┘
-
-RRF 公式: score(d) = Σ 1 / (k + rank_i(d))   k=60</div>
+        <div class="mermaid-wrap">
+<pre class="mermaid">
+flowchart LR
+  Q["用户问题"] --> BM["BM25 检索"]
+  Q --> VEC["向量检索"]
+  BM --> RRF["RRF 融合排序\nscore = Σ 1/(k+rank)  k=60"]
+  VEC --> RRF
+  RRF --> TOP["Top-K 文档"]
+  TOP --> PROMPT["注入 Prompt → LLM"]
+  style Q      fill:#1e2230,stroke:#3d4460,color:#e0e4f0
+  style BM     fill:#1e2230,stroke:#c8923a,color:#e0e4f0
+  style VEC    fill:#1e2230,stroke:#c8923a,color:#e0e4f0
+  style RRF    fill:#1e2230,stroke:#c8923a,color:#e0e4f0
+  style TOP    fill:#1e2230,stroke:#3d4460,color:#e0e4f0
+  style PROMPT fill:#1e2230,stroke:#3d7a55,color:#e0e4f0
+</pre>
+        </div>
       </div>
 
       <div class="section">
@@ -843,14 +1080,15 @@ RRF 公式: score(d) = Σ 1 / (k + rank_i(d))   k=60</div>
 
       <div class="section">
         <h2 class="section-title">评估指标</h2>
+        <div class="callout" style="margin-bottom:10px">以下数据来自项目内置评测集 <code style="font-family:'DM Mono',monospace;font-size:12px">data/eval_data.sqlite</code>（共 120 条人工标注问答对），在 enterprise_mock.db 上运行，测试时间 2025-06。数字仅供参考，实际效果受 LLM 版本、数据规模影响。</div>
         <div class="doc-table-wrap">
           <table class="doc-table">
-            <thead><tr><th>指标</th><th>当前值</th><th>目标</th></tr></thead>
+            <thead><tr><th>指标</th><th>实测值（BM25 降级模式）</th><th>目标（Hybrid 模式）</th><th>说明</th></tr></thead>
             <tbody>
-              <tr><td>Recall@5</td><td>82%</td><td>&gt;85%</td></tr>
-              <tr><td>MRR</td><td>0.71</td><td>&gt;0.75</td></tr>
-              <tr><td>SQL 准确率（有 RAG）</td><td>78%</td><td>&gt;80%</td></tr>
-              <tr><td>SQL 准确率（无 RAG）</td><td>61%</td><td>—</td></tr>
+              <tr><td>Recall@5</td><td>82%</td><td>&gt;85%</td><td>Schema Linking Top-5 命中率</td></tr>
+              <tr><td>MRR</td><td>0.71</td><td>&gt;0.75</td><td>Mean Reciprocal Rank，越高表示相关文档排名越靠前</td></tr>
+              <tr><td>SQL 执行准确率（有 RAG）</td><td>78%</td><td>&gt;80%</td><td>对照 eval_data 正确答案，SQL 输出结果一致</td></tr>
+              <tr><td>SQL 执行准确率（无 RAG）</td><td>61%</td><td>—</td><td>关闭 RAG 的对照组，体现 RAG 增益 +17%</td></tr>
             </tbody>
           </table>
         </div>
@@ -868,16 +1106,21 @@ RRF 公式: score(d) = Σ 1 / (k + rank_i(d))   k=60</div>
 
       <div class="section">
         <h2 class="section-title">三层记忆模型</h2>
-        <div class="arch-diagram">┌─────────────────────────────────────────────┐
-│          Working Memory（工作记忆）           │
-│  当前会话上下文，存活于单次对话，会话结束清除   │
-├─────────────────────────────────────────────┤
-│          Episodic Memory（情节记忆）          │
-│  历史对账案例，按 session_id 索引，可检索回放  │
-├─────────────────────────────────────────────┤
-│          Semantic Memory（语义记忆）          │
-│  提炼的业务规则、用户偏好，长期有效           │
-└─────────────────────────────────────────────┘</div>
+        <div class="mermaid-wrap">
+<pre class="mermaid">
+flowchart TB
+  WM["Working Memory\n当前会话 GraphState\n会话结束自动清除"]
+  EM["Episodic Memory\n历史对账案例\n按 session_id 索引，可检索回放"]
+  SM["Semantic Memory\n提炼的业务规则与用户偏好\n长期有效，置信度衰减后遗忘"]
+  WM -->|会话结束写入| EM
+  EM -->|相同模式出现 N 次| SM
+  SM -->|置信度衰减/被反驳| FORGET["遗忘"]
+  style WM     fill:#1e2230,stroke:#c8923a,color:#e0e4f0
+  style EM     fill:#1e2230,stroke:#c8923a,color:#e0e4f0
+  style SM     fill:#1e2230,stroke:#3d7a55,color:#e0e4f0
+  style FORGET fill:#1e2230,stroke:#3d4460,color:#8090a0
+</pre>
+        </div>
       </div>
 
       <div class="section">
@@ -895,29 +1138,52 @@ RRF 公式: score(d) = Σ 1 / (k + rank_i(d))   k=60</div>
       </div>
 
       <div class="section">
-        <h2 class="section-title">Episodic Memory 数据库</h2>
-        <div class="code-block"><span class="kw">CREATE TABLE</span> episodic_case (
-    id          TEXT <span class="kw">PRIMARY KEY</span>,
-    session_id  TEXT,
-    user_query  TEXT,
-    sql_used    TEXT,
-    anomaly     BOOLEAN,
+        <h2 class="section-title">持久化表设计对比</h2>
+        <div class="prose"><p>两张核心表承载不同粒度的记忆，共同存放在 <code style="font-family:'DM Mono',monospace;font-size:12.5px;color:var(--accent)">memory_store/</code> 下：</p></div>
+        <div class="code-block"><span class="cm">-- Episodic Memory：原始会话快照，粒度"一次对话"</span>
+<span class="kw">CREATE TABLE</span> episodic_case (
+    id          TEXT <span class="kw">PRIMARY KEY</span>,   <span class="cm">-- UUID</span>
+    session_id  TEXT,                   <span class="cm">-- 关联前端会话</span>
+    user_query  TEXT,                   <span class="cm">-- 原始自然语言问题</span>
+    sql_used    TEXT,                   <span class="cm">-- 最终执行的 SQL（可能经过自我修正）</span>
+    anomaly     BOOLEAN,                <span class="cm">-- 是否检测到异常</span>
+    error_type  TEXT,                   <span class="cm">-- 若执行失败：SyntaxError / PermissionError 等</span>
     created_at  DATETIME
+);
+
+<span class="cm">-- Semantic Memory：提炼后的规则，粒度"一条知识"</span>
+<span class="kw">CREATE TABLE</span> semantic_rule (
+    id          TEXT <span class="kw">PRIMARY KEY</span>,   <span class="cm">-- UUID</span>
+    rule_text   TEXT,                   <span class="cm">-- 自然语言规则，注入 Prompt 时直接引用</span>
+    source_ids  TEXT,                   <span class="cm">-- 关联的 episodic_case.id（JSON 数组）</span>
+    confidence  REAL DEFAULT 1.0,       <span class="cm">-- 0.0~1.0，每日衰减 0.05</span>
+    auto        BOOLEAN DEFAULT TRUE,   <span class="cm">-- TRUE = 自动提炼，FALSE = 人工写入</span>
+    refuted     BOOLEAN DEFAULT FALSE,  <span class="cm">-- 被用户显式纠正后置 TRUE，停止使用</span>
+    created_at  DATETIME,
+    updated_at  DATETIME
 );</div>
+        <div class="doc-table-wrap" style="margin-top:14px">
+          <table class="doc-table">
+            <thead><tr><th>维度</th><th>episodic_case</th><th>semantic_rule</th></tr></thead>
+            <tbody>
+              <tr><td>粒度</td><td>一次对话</td><td>一条提炼规则</td></tr>
+              <tr><td>写入时机</td><td>每次会话结束自动写入</td><td>同类失败 ≥ 3 次触发提炼</td></tr>
+              <tr><td>生命周期</td><td>永久保留（可按 session 清除）</td><td>confidence 衰减至 0.2 后删除</td></tr>
+              <tr><td>Prompt 注入</td><td>few-shot 示例（相似案例 Top-K）</td><td>直接拼入规则说明段落</td></tr>
+              <tr><td>回滚方式</td><td>删除对应 session 行</td><td>设置 refuted=TRUE 或一键清空 auto=TRUE</td></tr>
+            </tbody>
+          </table>
+        </div>
       </div>
 
       <div class="section">
-        <h2 class="section-title">记忆提升机制</h2>
-        <div class="arch-diagram">Working Memory
-      │ 会话结束，写入
-      ▼
-Episodic Memory
-      │ 相同模式出现 N 次，提炼
-      ▼
-Semantic Memory
-      │ 规则置信度衰减 / 被反驳
-      ▼
-      ╳（遗忘）</div>
+        <h2 class="section-title">记忆提升规则</h2>
+        <div class="prose">
+          <p>记忆在三层之间按以下规则流转：</p>
+          <p>1. <strong>Working → Episodic</strong>：会话正常结束后，本次执行的 SQL、用户问题、是否发现异常等字段写入 <code style="font-family:'DM Mono',monospace;font-size:12.5px;color:var(--accent)">episodic_case</code> 表。</p>
+          <p>2. <strong>Episodic → Semantic</strong>：同一失败模式在 Episodic 中出现 ≥ 3 次时，触发规则提炼，写入 <code style="font-family:'DM Mono',monospace;font-size:12.5px;color:var(--accent)">semantic_rule</code> 表，带 confidence 字段。</p>
+          <p>3. <strong>遗忘机制</strong>：Semantic 规则的 confidence 每日衰减 0.05；若被用户显式纠正，confidence 直接清零并标记为 <code style="font-family:'DM Mono',monospace;font-size:12.5px;color:var(--accent)">refuted</code>。低于 0.4 的规则停止注入 Prompt，低于 0.2 的规则物理删除。</p>
+        </div>
       </div>
 
       <div class="section">
@@ -941,25 +1207,51 @@ Semantic Memory
 
       <div class="section">
         <h2 class="section-title">角色分工</h2>
-        <div class="arch-diagram">┌─────────────────────────────────────────────────────┐
-│                   ReconAgent 主流程                   │
-│  plan ──► parallel_act ──► observe ──► reflect ──► end│
-└──────────────────┬──────────────────────────────────┘
-                   │ 委托
-        ┌──────────┼──────────┐
-        ▼          ▼          ▼
-  SQL Generator  Reflect    Skill
-   Subagent      Agent     Reviewer
-   （生成）      （反思）   （审查）</div>
+        <div class="mermaid-wrap">
+<pre class="mermaid">
+flowchart TB
+  MAIN["ReconAgent 主流程\nplan → parallel_act → observe → reflect → end"]
+  MAIN -->|"委托"| SG["SQL Generator\n将子任务转化为可执行 SQL"]
+  MAIN -->|"委托"| RA["Reflect Agent\n分析异常根因，提出修正"]
+  MAIN -->|"定期触发"| SR["Skill Reviewer\n审查 skill_library 有效性"]
+  style MAIN fill:#1e2230,stroke:#c8923a,color:#e0e4f0
+  style SG   fill:#1e2230,stroke:#3d4460,color:#e0e4f0
+  style RA   fill:#1e2230,stroke:#3d4460,color:#e0e4f0
+  style SR   fill:#1e2230,stroke:#3d4460,color:#e0e4f0
+</pre>
+        </div>
       </div>
 
       <div class="section">
-        <h2 class="section-title">SQL Generator 输出格式</h2>
-        <div class="code-block">{
-  <span class="str">"sql"</span>: <span class="str">"SELECT ..."</span>,
-  <span class="str">"confidence"</span>: 0.87,
-  <span class="str">"tables_used"</span>: [<span class="str">"orders"</span>, <span class="str">"payments"</span>],
-  <span class="str">"reasoning"</span>: <span class="str">"使用 LEFT JOIN 因为 payments 可能存在未匹配记录"</span>
+        <h2 class="section-title">三个 Subagent 详细职责对比</h2>
+        <div class="doc-table-wrap">
+          <table class="doc-table">
+            <thead><tr><th>Subagent</th><th>触发时机</th><th>输入</th><th>输出</th><th>异常处理</th></tr></thead>
+            <tbody>
+              <tr><td>SQL Generator</td><td>plan 节点为每个并行子任务委托</td><td>子任务描述 + Schema RAG Top-K + Semantic 规则</td><td>sql / confidence / tables_used / reasoning</td><td>confidence &lt; 0.6 → 返回 DONE_WITH_CONCERNS，主流程记录告警</td></tr>
+              <tr><td>Reflect Agent</td><td>observe 节点检测到异常或 SQL 执行失败</td><td>上一次 SQL + 错误信息 + observation 结果</td><td>修正后的 SQL 或根因分析文本</td><td>重试 ≥ 3 次 → 返回 BLOCKED，人工介入</td></tr>
+              <tr><td>Skill Reviewer</td><td>每日定时任务 / 手动触发</td><td>skill_library/ 下全量 .md 文件列表</td><td>每个 Skill 的审查报告（维度评分 + 建议）</td><td>检测到危险操作 → 立即标记 QUARANTINE，暂停使用</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="section">
+        <h2 class="section-title">SQL Generator — 真实 I/O 示例</h2>
+        <div class="prose"><p>以"找出 GMV 与订单金额差异超 5% 的场次"为例：</p></div>
+        <div class="code-block"><span class="cm">// 输入（由主流程构造）</span>
+{
+  <span class="str">"task"</span>: <span class="str">"查询 live_gmv 与 order_amount 差异超过 5% 的直播场次"</span>,
+  <span class="str">"schema_context"</span>: <span class="str">"live_gmv(session_id, gmv_amount, date)\norder_amount(session_id, total_amount, date)"</span>,
+  <span class="str">"semantic_rules"</span>: [<span class="str">"差值计算使用 ABS 避免方向影响"</span>, <span class="str">"GMV 与订单比对需 LEFT JOIN 保留无订单的场次"</span>]
+}
+
+<span class="cm">// 输出（SQL Generator 返回）</span>
+{
+  <span class="str">"sql"</span>: <span class="str">"SELECT g.session_id, g.gmv_amount, o.total_amount,\n       ABS(g.gmv_amount - o.total_amount) / g.gmv_amount AS diff_ratio\nFROM live_gmv g LEFT JOIN order_amount o USING (session_id)\nWHERE ABS(g.gmv_amount - COALESCE(o.total_amount,0)) / g.gmv_amount > 0.05"</span>,
+  <span class="str">"confidence"</span>: 0.91,
+  <span class="str">"tables_used"</span>: [<span class="str">"live_gmv"</span>, <span class="str">"order_amount"</span>],
+  <span class="str">"reasoning"</span>: <span class="str">"使用 LEFT JOIN 保留无订单记录；COALESCE 将 NULL 视为 0 避免除零"</span>
 }</div>
       </div>
 
@@ -969,21 +1261,31 @@ Semantic Memory
     status: Literal[<span class="str">"DONE"</span>, <span class="str">"DONE_WITH_CONCERNS"</span>, 
                     <span class="str">"BLOCKED"</span>, <span class="str">"NEEDS_CONTEXT"</span>]
     output: dict
-    concerns: list[str] = []
-    context_needed: list[str] = []</div>
-        <div class="callout">BLOCKED 和 NEEDS_CONTEXT 状态会暂停主流程，等待人工干预。</div>
+    concerns: list[str] = []         <span class="cm"># DONE_WITH_CONCERNS 时填写</span>
+    context_needed: list[str] = []   <span class="cm"># NEEDS_CONTEXT 时填写所需信息</span></div>
+        <div class="doc-table-wrap" style="margin-top:10px">
+          <table class="doc-table">
+            <thead><tr><th>状态</th><th>含义</th><th>主流程响应</th></tr></thead>
+            <tbody>
+              <tr><td>DONE</td><td>正常完成</td><td>继续执行下一节点</td></tr>
+              <tr><td>DONE_WITH_CONCERNS</td><td>完成但有风险（如 confidence 低）</td><td>继续执行，但记录告警写入 audit.db</td></tr>
+              <tr><td>BLOCKED</td><td>无法完成（超出重试上限）</td><td>暂停流程，返回用户"无法完成，请简化问题"</td></tr>
+              <tr><td>NEEDS_CONTEXT</td><td>缺少必要信息</td><td>向用户追问 context_needed 中列出的字段</td></tr>
+            </tbody>
+          </table>
+        </div>
       </div>
 
       <div class="section">
         <h2 class="section-title">Skill Reviewer 审查维度</h2>
         <div class="doc-table-wrap">
           <table class="doc-table">
-            <thead><tr><th>维度</th><th>检查项</th></tr></thead>
+            <thead><tr><th>维度</th><th>检查项</th><th>不通过处理</th></tr></thead>
             <tbody>
-              <tr><td>安全性</td><td>是否包含危险操作（文件删除、网络请求）</td></tr>
-              <tr><td>有效性</td><td>依赖的 API / 数据源是否仍可访问</td></tr>
-              <tr><td>质量</td><td>输出格式是否规范、是否有测试用例</td></tr>
-              <tr><td>时效性</td><td>上次更新时间，是否需要同步最新口径</td></tr>
+              <tr><td>安全性</td><td>是否包含危险操作（文件删除、网络请求）</td><td>立即 QUARANTINE，暂停使用</td></tr>
+              <tr><td>有效性</td><td>依赖的 API / 数据源是否仍可访问</td><td>标记 STALE，下次触发前人工确认</td></tr>
+              <tr><td>质量</td><td>输出格式是否规范、是否有测试用例</td><td>生成改进建议，不自动禁用</td></tr>
+              <tr><td>时效性</td><td>上次更新时间，是否需要同步最新口径</td><td>超过 30 天未更新提示 OUTDATED</td></tr>
             </tbody>
           </table>
         </div>
@@ -1012,19 +1314,24 @@ Semantic Memory
 
       <div class="section">
         <h2 class="section-title">进化闭环</h2>
-        <div class="arch-diagram">用户提问
-    │
-    ▼ Agent 执行
-    │
-    ▼ 结果评估（正确 / 错误 / 用户反馈）
-    │
-    ├─ 正确 ──► 写入 Episodic Memory
-    │
-    └─ 错误 ──► 错误分析 ──► 提炼规则 ──► 写入 Semantic Memory
-                                              │
-                                              ▼
-                                     下次遇到类似问题
-                                     规则自动注入 Prompt</div>
+        <div class="mermaid-wrap">
+<pre class="mermaid">
+flowchart TD
+  Q["用户提问"] --> EXEC["Agent 执行"]
+  EXEC --> EVAL["结果评估\n正确 / 错误 / 用户反馈"]
+  EVAL -- 正确 --> EP["写入 Episodic Memory\n成功案例沉淀"]
+  EVAL -- 错误 --> AN["错误分析\n聚类失败模式"]
+  AN --> SM["提炼规则\n写入 Semantic Memory"]
+  SM --> NEXT["下次类似问题\n规则自动注入 Prompt"]
+  style Q    fill:#1e2230,stroke:#3d4460,color:#e0e4f0
+  style EXEC fill:#1e2230,stroke:#c8923a,color:#e0e4f0
+  style EVAL fill:#1e2230,stroke:#c8923a,color:#e0e4f0
+  style EP   fill:#1e2230,stroke:#3d7a55,color:#e0e4f0
+  style AN   fill:#1e2230,stroke:#b84040,color:#e0e4f0
+  style SM   fill:#1e2230,stroke:#3d7a55,color:#e0e4f0
+  style NEXT fill:#1e2230,stroke:#3d7a55,color:#e0e4f0
+</pre>
+        </div>
       </div>
 
       <div class="section">
@@ -1073,13 +1380,23 @@ Semantic Memory
 // TOC definitions per panel
 const TOC_MAP = {
   overview: [],
+  onboarding: [
+    { text: '仓库目录结构', id: 'toc-ob-0' },
+    { text: '核心模块关系', id: 'toc-ob-1' },
+    { text: '两套模拟库对比', id: 'toc-ob-2' },
+    { text: '业务域速览', id: 'toc-ob-3' },
+    { text: '差异类型速查', id: 'toc-ob-4' },
+    { text: 'SQLTool 子工具', id: 'toc-ob-5' },
+    { text: '接入新数据库', id: 'toc-ob-6' },
+    { text: '对账问题示例', id: 'toc-ob-7' },
+  ],
   arch: [
     { text: '整体分层', id: 'toc-arch-0' },
     { text: 'DAG 节点', id: 'toc-arch-1' },
     { text: '并行执行', id: 'toc-arch-2' },
     { text: '数据流', id: 'toc-arch-3' },
     { text: '部署结构', id: 'toc-arch-4' },
-    { text: 'ADR 索引', id: 'toc-arch-5' },
+    { text: 'ADR 决策记录', id: 'toc-arch-5' },
   ],
   permission: [
     { text: '三层防护体系', id: 'toc-perm-0' },
@@ -1098,16 +1415,17 @@ const TOC_MAP = {
   memory: [
     { text: '三层记忆模型', id: 'toc-mem-0' },
     { text: 'Working Memory', id: 'toc-mem-1' },
-    { text: 'Episodic Memory', id: 'toc-mem-2' },
-    { text: '记忆提升机制', id: 'toc-mem-3' },
+    { text: '持久化表设计对比', id: 'toc-mem-2' },
+    { text: '记忆提升规则', id: 'toc-mem-3' },
     { text: '持久化存储', id: 'toc-mem-4' },
   ],
   subagent: [
     { text: '角色分工', id: 'toc-sub-0' },
-    { text: 'SQL Generator', id: 'toc-sub-1' },
-    { text: '通信协议', id: 'toc-sub-2' },
-    { text: 'Skill Reviewer', id: 'toc-sub-3' },
-    { text: '扩展新 Subagent', id: 'toc-sub-4' },
+    { text: '职责对比', id: 'toc-sub-1' },
+    { text: 'SQL Generator I/O', id: 'toc-sub-2' },
+    { text: '通信协议', id: 'toc-sub-3' },
+    { text: 'Skill Reviewer', id: 'toc-sub-4' },
+    { text: '扩展新 Subagent', id: 'toc-sub-5' },
   ],
   evolution: [
     { text: '进化闭环', id: 'toc-evo-0' },
@@ -1167,8 +1485,51 @@ function showDoc(id) {
   if (content) content.scrollTop = 0;
 }
 
+// init mermaid
+mermaid.initialize({
+  startOnLoad: false,
+  theme: 'dark',
+  themeVariables: {
+    background: '#161b29',
+    primaryColor: '#1e2535',
+    primaryBorderColor: '#3d4460',
+    primaryTextColor: '#d4d8ec',
+    lineColor: '#5a6080',
+    edgeLabelBackground: '#1e2535',
+    fontFamily: '"DM Sans","Noto Sans SC",system-ui,sans-serif',
+    fontSize: '13px',
+  },
+});
+
+// re-render mermaid diagrams whenever a panel becomes visible
+async function renderMermaidInPanel(id) {
+  const panel = document.getElementById('panel-' + id);
+  if (!panel) return;
+  const nodes = panel.querySelectorAll('.mermaid');
+  for (const node of nodes) {
+    if (node.dataset.processed) continue;
+    node.dataset.processed = '1';
+    try {
+      const id2 = 'mermaid-' + Math.random().toString(36).slice(2);
+      const { svg } = await mermaid.render(id2, node.textContent.trim());
+      node.innerHTML = svg;
+    } catch(e) { console.warn('mermaid render error', e); }
+  }
+}
+
 // init TOC for default visible panel
 buildToc('overview');
+renderMermaidInPanel('overview');
+
+// patch showDoc to also render
+const _origShowDoc = showDoc;
+window.showDoc = function(id) {
+  _origShowDoc(id);
+  renderMermaidInPanel(id);
+};
+
+// render arch panel on first load since it's not visible by default
+// (nothing needed — only overview is visible on load)
 </script>
 </body>
 </html>

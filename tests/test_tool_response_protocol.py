@@ -11,10 +11,10 @@
 
 import pytest
 import json
-from hello_agents.tools.response import ToolResponse, ToolStatus
-from hello_agents.tools.errors import ToolErrorCode
-from hello_agents.tools.builtin.calculator import CalculatorTool
-from hello_agents.tools.registry import ToolRegistry
+from recon_core.tools.response import ToolResponse, ToolStatus
+from recon_core.tools.errors import ToolErrorCode
+from recon_core.tools.builtin.calculator import CalculatorTool
+from recon_core.tools.registry import ToolRegistry
 
 
 class TestToolResponse:

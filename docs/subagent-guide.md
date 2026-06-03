@@ -19,7 +19,7 @@
 ### 1. 零配置使用（推荐）
 
 ```python
-from hello_agents import ReActAgent, HelloAgentsLLM, Config
+from recon_core import ReActAgent, HelloAgentsLLM, Config
 
 # 启用子代理机制
 config = Config(subagent_enabled=True)
@@ -34,8 +34,8 @@ agent.run("使用 Task 工具探索项目结构")
 ### 2. 手动调用子代理
 
 ```python
-from hello_agents import ReActAgent, HelloAgentsLLM
-from hello_agents.tools.tool_filter import ReadOnlyFilter
+from recon_core import ReActAgent, HelloAgentsLLM
+from recon_core.tools.tool_filter import ReadOnlyFilter
 
 # 创建主 Agent 和子 Agent
 main_agent = ReActAgent("main", llm, tool_registry=registry)
@@ -43,7 +43,7 @@ explore_agent = ReActAgent("explorer", llm, tool_registry=registry)
 
 # 手动调用子代理（上下文隔离）
 result = explore_agent.run_as_subagent(
-    task="探索 hello_agents/core/ 目录",
+    task="探索 recon_core/core/ 目录",
     tool_filter=ReadOnlyFilter(),  # 只读权限
     return_summary=True
 )
@@ -88,7 +88,7 @@ analyze_agent.run_as_subagent("分析架构设计")
 **3 种内置过滤器：**
 
 ```python
-from hello_agents.tools.tool_filter import (
+from recon_core.tools.tool_filter import (
     ReadOnlyFilter,      # 只读工具（探索、分析）
     FullAccessFilter,    # 完全访问（排除危险工具）
     CustomFilter         # 自定义白名单/黑名单
@@ -128,7 +128,7 @@ allowed = custom.filter(["Read", "Write", "Edit"])
 
 **create_agent() - 统一创建接口：**
 ```python
-from hello_agents.agents.factory import create_agent
+from recon_core.agents.factory import create_agent
 
 # 创建不同类型的 Agent
 react_agent = create_agent("react", "explorer", llm, registry)
@@ -139,7 +139,7 @@ simple_agent = create_agent("simple", "assistant", llm, registry)
 
 **default_subagent_factory() - 默认工厂：**
 ```python
-from hello_agents.agents.factory import default_subagent_factory
+from recon_core.agents.factory import default_subagent_factory
 
 subagent = default_subagent_factory(
     agent_type="react",
@@ -171,7 +171,7 @@ TaskTool 支持以下参数：
 # Agent 调用 TaskTool
 agent.run("""
 使用 Task 工具执行以下任务：
-- task: 探索 hello_agents/core/ 目录
+- task: 探索 recon_core/core/ 目录
 - agent_type: react
 - tool_filter: readonly
 """)
@@ -180,8 +180,8 @@ agent.run("""
 ### 2. 自定义子代理工厂
 
 ```python
-from hello_agents.agents.factory import create_agent, default_subagent_factory
-from hello_agents.tools.builtin.task_tool import TaskTool
+from recon_core.agents.factory import create_agent, default_subagent_factory
+from recon_core.tools.builtin.task_tool import TaskTool
 
 # 主模型（强大但昂贵）
 main_llm = HelloAgentsLLM(provider="openai", model="gpt-4")
@@ -213,7 +213,7 @@ registry.register_tool(task_tool)
 ### 3. 不同类型的子代理
 
 ```python
-from hello_agents.agents.factory import create_agent
+from recon_core.agents.factory import create_agent
 
 # 创建不同类型的子代理
 agents = {

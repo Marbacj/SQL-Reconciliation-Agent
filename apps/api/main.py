@@ -7,14 +7,16 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 import sqlite3
 import time
 import uuid
 from contextlib import contextmanager
+from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 try:
-    from fastapi import FastAPI, HTTPException
+    from fastapi import FastAPI, File, HTTPException, UploadFile
     from fastapi.middleware.cors import CORSMiddleware
     from fastapi.responses import FileResponse, JSONResponse, PlainTextResponse
     from fastapi.staticfiles import StaticFiles
@@ -398,6 +400,72 @@ def _build_app():
             f"recon_v2_cost_usd_total {cost:.6f}",
         ]
         return "\n".join(lines) + "\n"
+
+    # ── Knowledge Base CRUD ─────────────────────────────────────────────────
+    _KB_DIR = Path(os.getenv("KB_DIR", "knowledge_base/table_docs"))
+
+    def _safe_name(filename: str) -> str:
+        """保证文件名安全（只允许字母数字下划线横线，后缀 .md）"""
+        stem = re.sub(r"[^\w\-]", "_", Path(filename).stem)
+        return stem + ".md"
+
+    @app.get("/kb/docs", tags=["knowledge-base"])
+    def kb_list():
+        """列出知识库中的所有 Markdown 文档。"""
+        _KB_DIR.mkdir(parents=True, exist_ok=True)
+        docs = []
+        for p in sorted(_KB_DIR.glob("*.md")):
+            stat = p.stat()
+            docs.append({
+                "name": p.name,
+                "size": stat.st_size,
+                "updated": int(stat.st_mtime * 1000),
+            })
+        return {"docs": docs, "total": len(docs)}
+
+    @app.get("/kb/docs/{filename}", tags=["knowledge-base"])
+    def kb_get(filename: str):
+        """读取单个文档内容。"""
+        safe = _safe_name(filename)
+        path = _KB_DIR / safe
+        if not path.exists():
+            raise HTTPException(status_code=404, detail="doc not found")
+        return {"name": safe, "content": path.read_text(encoding="utf-8")}
+
+    @app.post("/kb/docs", tags=["knowledge-base"])
+    async def kb_upload(file: UploadFile = File(...)):
+        """上传 Markdown 文档到知识库（已存在则覆盖）。"""
+        if not file.filename or not file.filename.endswith(".md"):
+            raise HTTPException(status_code=400, detail="只支持 .md 文件")
+        _KB_DIR.mkdir(parents=True, exist_ok=True)
+        safe = _safe_name(file.filename)
+        content = await file.read()
+        (_KB_DIR / safe).write_bytes(content)
+        logger.info("kb_upload: saved %s (%d bytes)", safe, len(content))
+        return {"status": "ok", "name": safe, "size": len(content)}
+
+    @app.put("/kb/docs/{filename}", tags=["knowledge-base"])
+    def kb_update(filename: str, body: Dict[str, Any]):
+        """直接更新文档内容（body: {content: str}）。"""
+        safe = _safe_name(filename)
+        path = _KB_DIR / safe
+        content = body.get("content", "")
+        if not isinstance(content, str):
+            raise HTTPException(status_code=400, detail="content 必须是字符串")
+        _KB_DIR.mkdir(parents=True, exist_ok=True)
+        path.write_text(content, encoding="utf-8")
+        return {"status": "ok", "name": safe, "size": len(content)}
+
+    @app.delete("/kb/docs/{filename}", tags=["knowledge-base"])
+    def kb_delete(filename: str):
+        """删除指定文档。"""
+        safe = _safe_name(filename)
+        path = _KB_DIR / safe
+        if not path.exists():
+            raise HTTPException(status_code=404, detail="doc not found")
+        path.unlink()
+        logger.info("kb_delete: removed %s", safe)
+        return {"status": "ok", "name": safe}
 
     return app
 

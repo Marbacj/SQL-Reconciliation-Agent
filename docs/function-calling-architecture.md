@@ -18,8 +18,8 @@
 ### 1. 使用 Function Calling
 
 ```python
-from hello_agents import ReActAgent, HelloAgentsLLM, ToolRegistry
-from hello_agents.tools.builtin import ReadTool, SearchTool
+from recon_core import ReActAgent, HelloAgentsLLM, ToolRegistry
+from recon_core.tools.builtin import ReadTool, SearchTool
 
 # 创建工具注册表
 registry = ToolRegistry()
@@ -36,8 +36,8 @@ result = agent.run("读取 README.md 并搜索相关文档")
 ### 2. 直接调用 LLM Function Calling
 
 ```python
-from hello_agents.llm import HelloAgentsLLM
-from hello_agents.tools.builtin import ReadTool
+from recon_core.llm import HelloAgentsLLM
+from recon_core.tools.builtin import ReadTool
 
 llm = HelloAgentsLLM()
 tool = ReadTool(project_root="./")
@@ -175,8 +175,8 @@ class BaseAgent:
 ### 1. ReActAgent 使用 Function Calling
 
 ```python
-from hello_agents import ReActAgent, HelloAgentsLLM, ToolRegistry
-from hello_agents.tools.builtin import ReadTool, WriteTool
+from recon_core import ReActAgent, HelloAgentsLLM, ToolRegistry
+from recon_core.tools.builtin import ReadTool, WriteTool
 
 registry = ToolRegistry()
 registry.register_tool(ReadTool(project_root="./"))
@@ -197,7 +197,7 @@ result = agent.run("读取 config.py，修改端口为 8080，保存")
 ### 2. ReflectionAgent 使用 Function Calling
 
 ```python
-from hello_agents import ReflectionAgent, HelloAgentsLLM
+from recon_core import ReflectionAgent, HelloAgentsLLM
 
 agent = ReflectionAgent("thinker", HelloAgentsLLM(), tool_registry=registry)
 
@@ -212,7 +212,7 @@ result = agent.run("分析项目架构")
 ### 3. PlanSolveAgent 使用 Function Calling
 
 ```python
-from hello_agents import PlanSolveAgent, HelloAgentsLLM
+from recon_core import PlanSolveAgent, HelloAgentsLLM
 
 agent = PlanSolveAgent("planner", HelloAgentsLLM(), tool_registry=registry)
 
@@ -227,7 +227,7 @@ result = agent.run("重构项目结构")
 ### 4. SimpleAgent 使用 Function Calling
 
 ```python
-from hello_agents import SimpleAgent, HelloAgentsLLM
+from recon_core import SimpleAgent, HelloAgentsLLM
 
 agent = SimpleAgent("assistant", HelloAgentsLLM(), tool_registry=registry)
 
@@ -406,7 +406,7 @@ async def execute_tools_parallel(tool_calls: List[ToolCall]):
 ### 3. 工具调用追踪
 
 ```python
-from hello_agents.core.lifecycle import LifecycleHook
+from recon_core.core.lifecycle import LifecycleHook
 
 class ToolCallTracker(LifecycleHook):
     async def on_tool_call(self, event):
@@ -454,7 +454,7 @@ A: 几乎没有开销：
 
 A: 使用 TraceLogger：
 ```python
-from hello_agents.core.observability import TraceLogger
+from recon_core.core.observability import TraceLogger
 
 logger = TraceLogger(output_dir="logs")
 agent = ReActAgent("assistant", llm, trace_logger=logger)

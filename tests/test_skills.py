@@ -13,10 +13,10 @@ from pathlib import Path
 import tempfile
 import shutil
 
-from hello_agents.skills import SkillLoader, Skill
-from hello_agents.tools.builtin.skill_tool import SkillTool
-from hello_agents.tools.response import ToolResponse, ToolStatus
-from hello_agents.tools.errors import ToolErrorCode
+from recon_core.skills import SkillLoader, Skill
+from recon_core.tools.builtin.skill_tool import SkillTool
+from recon_core.tools.response import ToolResponse, ToolStatus
+from recon_core.tools.errors import ToolErrorCode
 from dotenv import load_dotenv
 load_dotenv()
 
@@ -212,10 +212,10 @@ class TestAgentIntegration:
 
     def test_agent_skill_loader_initialization(self):
         """测试 Agent 初始化时创建 SkillLoader"""
-        from hello_agents.core.agent import Agent
-        from hello_agents.core.llm import HelloAgentsLLM
-        from hello_agents.core.config import Config
-        from hello_agents.tools.registry import ToolRegistry
+        from recon_core.core.agent import Agent
+        from recon_core.core.llm import HelloAgentsLLM
+        from recon_core.core.config import Config
+        from recon_core.tools.registry import ToolRegistry
 
         # 创建临时 skills 目录
         temp_dir = tempfile.mkdtemp()
@@ -248,9 +248,9 @@ class TestAgentIntegration:
 
     def test_agent_skill_disabled(self):
         """测试禁用 Skills 功能"""
-        from hello_agents.core.agent import Agent
-        from hello_agents.core.llm import HelloAgentsLLM
-        from hello_agents.core.config import Config
+        from recon_core.core.agent import Agent
+        from recon_core.core.llm import HelloAgentsLLM
+        from recon_core.core.config import Config
 
         config = Config(skills_enabled=False)
         llm = HelloAgentsLLM(provider="openai", model="gpt-3.5-turbo")

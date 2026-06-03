@@ -7,10 +7,10 @@ from pathlib import Path
 import time
 import os
 
-from hello_agents.tools.builtin.file_tools import ReadTool, WriteTool, EditTool, MultiEditTool
-from hello_agents.tools.registry import ToolRegistry
-from hello_agents.tools.response import ToolStatus
-from hello_agents.tools.errors import ToolErrorCode
+from recon_core.tools.builtin.file_tools import ReadTool, WriteTool, EditTool, MultiEditTool
+from recon_core.tools.registry import ToolRegistry
+from recon_core.tools.response import ToolStatus
+from recon_core.tools.errors import ToolErrorCode
 
 
 @pytest.fixture

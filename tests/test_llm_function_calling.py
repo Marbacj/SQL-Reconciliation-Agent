@@ -5,9 +5,9 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from hello_agents.core.exceptions import HelloAgentsException
-from hello_agents.core.llm import HelloAgentsLLM
-from hello_agents.core.llm_adapters import AnthropicAdapter, GeminiAdapter, OpenAIAdapter
+from recon_core.core.exceptions import HelloAgentsException
+from recon_core.core.llm import HelloAgentsLLM
+from recon_core.core.llm_adapters import AnthropicAdapter, GeminiAdapter, OpenAIAdapter
 
 
 def _tool_schema():

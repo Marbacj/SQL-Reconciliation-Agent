@@ -3,9 +3,9 @@
 import os
 import pytest
 
-from hello_agents.tools.builtin.sql_tool import SQLTool
-from hello_agents.tools.registry import ToolRegistry
-from hello_agents.tools.response import ToolResponse, ToolStatus
+from recon_core.tools.builtin.sql_tool import SQLTool
+from recon_core.tools.registry import ToolRegistry
+from recon_core.tools.response import ToolResponse, ToolStatus
 
 
 # ---------- helpers ----------

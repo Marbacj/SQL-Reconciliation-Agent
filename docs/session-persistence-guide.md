@@ -21,7 +21,7 @@ HelloAgents 的会话持久化功能允许你：
 ### 基本使用
 
 ```python
-from hello_agents import SimpleAgent, HelloAgentsLLM, Config
+from recon_core import SimpleAgent, HelloAgentsLLM, Config
 
 # 创建 Agent（默认启用会话持久化）
 config = Config(session_enabled=True)
@@ -106,7 +106,7 @@ if agent.session_store:
 ### 基本配置
 
 ```python
-from hello_agents import Config
+from recon_core import Config
 
 config = Config(
     # 是否启用会话持久化
@@ -155,7 +155,7 @@ agent = SimpleAgent("assistant", llm, config=config)
 ReActAgent 自动在异常时保存会话：
 
 ```python
-from hello_agents import ReActAgent, ToolRegistry
+from recon_core import ReActAgent, ToolRegistry
 
 agent = ReActAgent("assistant", llm, tool_registry=registry)
 
@@ -371,7 +371,7 @@ agent = SimpleAgent("assistant", llm, config=config)
 ### 2. 编程式访问 SessionStore
 
 ```python
-from hello_agents.core.session_store import SessionStore
+from recon_core.core.session_store import SessionStore
 
 # 创建独立的 SessionStore
 store = SessionStore(session_dir="my-sessions")

@@ -19,7 +19,7 @@
 
 ```python
 import asyncio
-from hello_agents import ReActAgent, HelloAgentsLLM
+from recon_core import ReActAgent, HelloAgentsLLM
 
 async def main():
     agent = ReActAgent("assistant", HelloAgentsLLM())
@@ -35,7 +35,7 @@ asyncio.run(main())
 
 ```python
 import asyncio
-from hello_agents import ReActAgent, HelloAgentsLLM
+from recon_core import ReActAgent, HelloAgentsLLM
 
 async def main():
     agent = ReActAgent("assistant", HelloAgentsLLM())
@@ -66,7 +66,7 @@ asyncio.run(main())
 ### 2. 生命周期钩子
 
 ```python
-from hello_agents.core.lifecycle import LifecycleHook, AgentEvent
+from recon_core.core.lifecycle import LifecycleHook, AgentEvent
 
 class MyHook(LifecycleHook):
     async def on_start(self, event: AgentEvent):
@@ -116,8 +116,8 @@ asyncio.run(main())
 
 ```python
 import asyncio
-from hello_agents import ReActAgent, HelloAgentsLLM, ToolRegistry
-from hello_agents.tools.builtin import ReadTool, SearchTool
+from recon_core import ReActAgent, HelloAgentsLLM, ToolRegistry
+from recon_core.tools.builtin import ReadTool, SearchTool
 
 async def main():
     # 创建 Agent
@@ -138,8 +138,8 @@ asyncio.run(main())
 
 ```python
 import asyncio
-from hello_agents import ReActAgent, HelloAgentsLLM
-from hello_agents.core.streaming import StreamEventType
+from recon_core import ReActAgent, HelloAgentsLLM
+from recon_core.core.streaming import StreamEventType
 
 async def main():
     agent = ReActAgent("assistant", HelloAgentsLLM())
@@ -174,8 +174,8 @@ asyncio.run(main())
 
 ```python
 import asyncio
-from hello_agents import ReActAgent, HelloAgentsLLM
-from hello_agents.core.lifecycle import LifecycleHook, AgentEvent
+from recon_core import ReActAgent, HelloAgentsLLM
+from recon_core.core.lifecycle import LifecycleHook, AgentEvent
 
 class LoggingHook(LifecycleHook):
     """日志钩子"""
@@ -228,8 +228,8 @@ asyncio.run(main())
 
 ```python
 import asyncio
-from hello_agents import ReActAgent, HelloAgentsLLM, ToolRegistry
-from hello_agents.tools.builtin import ReadTool
+from recon_core import ReActAgent, HelloAgentsLLM, ToolRegistry
+from recon_core.tools.builtin import ReadTool
 
 async def main():
     registry = ToolRegistry()
@@ -263,8 +263,8 @@ asyncio.run(main())
 
 ```python
 import asyncio
-from hello_agents import ReActAgent, HelloAgentsLLM
-from hello_agents.core.streaming import StreamEventType
+from recon_core import ReActAgent, HelloAgentsLLM
+from recon_core.core.streaming import StreamEventType
 
 async def main():
     agent = ReActAgent("assistant", HelloAgentsLLM())
@@ -308,8 +308,8 @@ asyncio.run(main())
 
 ```python
 import asyncio
-from hello_agents import ReActAgent, HelloAgentsLLM
-from hello_agents.core.lifecycle import LifecycleHook, AgentEvent
+from recon_core import ReActAgent, HelloAgentsLLM
+from recon_core.core.lifecycle import LifecycleHook, AgentEvent
 
 class ErrorHandler(LifecycleHook):
     async def on_error(self, event: AgentEvent):
@@ -340,7 +340,7 @@ asyncio.run(main())
 
 ```python
 import asyncio
-from hello_agents import ReActAgent, HelloAgentsLLM
+from recon_core import ReActAgent, HelloAgentsLLM
 
 async def main():
     async with ReActAgent("assistant", HelloAgentsLLM()) as agent:
@@ -354,7 +354,7 @@ asyncio.run(main())
 
 ```python
 import asyncio
-from hello_agents import ReActAgent, HelloAgentsLLM
+from recon_core import ReActAgent, HelloAgentsLLM
 
 async def process_task(agent, task):
     return await agent.arun(task)
@@ -383,7 +383,7 @@ asyncio.run(main())
 
 ```python
 import asyncio
-from hello_agents import ReActAgent, HelloAgentsLLM
+from recon_core import ReActAgent, HelloAgentsLLM
 
 async def main():
     agent = ReActAgent("assistant", HelloAgentsLLM())

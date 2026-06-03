@@ -7,10 +7,10 @@
 - 标准错误码的使用
 """
 
-from hello_agents.tools.base import Tool, ToolParameter
-from hello_agents.tools.response import ToolResponse, ToolStatus
-from hello_agents.tools.errors import ToolErrorCode
-from hello_agents.tools.registry import ToolRegistry
+from recon_core.tools.base import Tool, ToolParameter
+from recon_core.tools.response import ToolResponse, ToolStatus
+from recon_core.tools.errors import ToolErrorCode
+from recon_core.tools.registry import ToolRegistry
 from typing import Dict, Any
 # 加载环境变量
 from dotenv import load_dotenv

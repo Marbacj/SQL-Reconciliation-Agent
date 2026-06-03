@@ -1,6 +1,6 @@
 ## 1. 项目骨架与归档（Stage 0 - Day 1）
 
-- [ ] 1.1 git mv `hello_agents/` `legacy/hello_agents/`，git mv `examples/` `legacy/examples/`
+- [ ] 1.1 git mv `recon_core/` `legacy/recon_core/`，git mv `examples/` `legacy/examples/`
 - [ ] 1.2 在 `legacy/README.md` 添加"已废弃，仅作 v2 对比基线"标注
 - [ ] 1.3 创建 v2 目录骨架：`recon_v2/{core,orchestration,tools,memory,rag,evolution,infra,adapters}`、`apps/{cli,api,notebook}`、`tests/{eval,unit,integration}`、`deploy/`、`docs/v2/adr/`
 - [ ] 1.4 创建 `pyproject.toml`（uv 或 pdm 管理），写入完整依赖列表（见 design.md D8 + architecture.md 第 6.1 节）

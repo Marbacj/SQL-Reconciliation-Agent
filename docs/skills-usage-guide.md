@@ -64,8 +64,8 @@ $ARGUMENTS
 ### 3. 使用 Agent
 
 ```python
-from hello_agents import ReActAgent, HelloAgentsLLM
-from hello_agents.tools import ToolRegistry
+from recon_core import ReActAgent, HelloAgentsLLM
+from recon_core.tools import ToolRegistry
 
 # 创建 Agent（框架会自动检测 skills/ 目录）
 agent = ReActAgent(
@@ -171,8 +171,8 @@ $ARGUMENTS
 ### 方式 1：零配置（推荐）
 
 ```python
-from hello_agents import ReActAgent, HelloAgentsLLM
-from hello_agents.tools import ToolRegistry
+from recon_core import ReActAgent, HelloAgentsLLM
+from recon_core.tools import ToolRegistry
 
 # 只要 skills/ 目录存在，框架会自动激活
 agent = ReActAgent(
@@ -188,7 +188,7 @@ result = agent.run("帮我处理 PDF 文件")
 ### 方式 2：自定义配置
 
 ```python
-from hello_agents import Config
+from recon_core import Config
 
 # 自定义 skills 目录
 config = Config(
@@ -208,8 +208,8 @@ agent = ReActAgent(
 ### 方式 3：手动控制
 
 ```python
-from hello_agents.skills import SkillLoader
-from hello_agents.tools.builtin.skill_tool import SkillTool
+from recon_core.skills import SkillLoader
+from recon_core.tools.builtin.skill_tool import SkillTool
 from pathlib import Path
 
 # 手动创建 SkillLoader
@@ -470,7 +470,7 @@ python examples/check_skills_activation.py
 
 **检查**：
 ```python
-from hello_agents.skills import SkillLoader
+from recon_core.skills import SkillLoader
 from pathlib import Path
 
 loader = SkillLoader(skills_dir=Path("skills"))

@@ -5,7 +5,7 @@
 
 ## Context
 
-v1 自研 `hello_agents` 框架带来三个核心问题：
+v1 自研 `recon_core` 框架带来三个核心问题：
 1. ReAct loop 边界靠 `step_counter > N` 硬编码，缺乏可观察的状态机视角
 2. 中断恢复能力缺失，长流程一旦失败必须从头跑
 3. 自研代码必须自己维护，对面试简历是减分项（"自己写了一个 ReAct" vs "用 LangGraph 实现 stateful agent"）

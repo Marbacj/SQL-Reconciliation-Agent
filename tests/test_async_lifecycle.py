@@ -3,14 +3,14 @@
 import pytest
 import asyncio
 import time
-from hello_agents.core.lifecycle import AgentEvent, EventType, ExecutionContext
-from hello_agents.core.agent import Agent
-from hello_agents.core.llm import HelloAgentsLLM
-from hello_agents.core.config import Config
-from hello_agents.agents.react_agent import ReActAgent
-from hello_agents.tools.base import Tool, ToolParameter
-from hello_agents.tools.response import ToolResponse
-from hello_agents.tools.registry import ToolRegistry
+from recon_core.core.lifecycle import AgentEvent, EventType, ExecutionContext
+from recon_core.core.agent import Agent
+from recon_core.core.llm import HelloAgentsLLM
+from recon_core.core.config import Config
+from recon_core.agents.react_agent import ReActAgent
+from recon_core.tools.base import Tool, ToolParameter
+from recon_core.tools.response import ToolResponse
+from recon_core.tools.registry import ToolRegistry
 
 
 # ==================== 测试工具 ====================

@@ -22,7 +22,7 @@
 TodoWrite 工具已内置在 HelloAgents 框架中，默认启用。
 
 ```python
-from hello_agents import ReActAgent, HelloAgentsLLM, ToolRegistry, Config
+from recon_core import ReActAgent, HelloAgentsLLM, ToolRegistry, Config
 
 # 创建 Agent（TodoWriteTool 会自动注册）
 config = Config(todowrite_enabled=True)
@@ -43,7 +43,7 @@ agent.run("帮我实现用户系统、订单系统和支付系统")
 ### 手动使用
 
 ```python
-from hello_agents.tools.builtin import TodoWriteTool
+from recon_core.tools.builtin import TodoWriteTool
 
 # 创建工具
 tool = TodoWriteTool(
@@ -150,7 +150,7 @@ tool.load_todos("memory/todos/todoList-20250220-103045.json")
 ### 示例 1：基本工作流
 
 ```python
-from hello_agents.tools.builtin import TodoWriteTool
+from recon_core.tools.builtin import TodoWriteTool
 
 tool = TodoWriteTool(project_root="./")
 
@@ -433,7 +433,7 @@ Agent: 📋 [2/3] 进行中: 实现支付功能
 ### Config 参数
 
 ```python
-from hello_agents import Config
+from recon_core import Config
 
 config = Config(
     # 启用/禁用 TodoWrite

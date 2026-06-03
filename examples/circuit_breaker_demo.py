@@ -6,11 +6,11 @@
 - 与 ToolRegistry 集成
 """
 
-from hello_agents.tools.circuit_breaker import CircuitBreaker
-from hello_agents.tools.registry import ToolRegistry
-from hello_agents.tools.base import Tool, ToolParameter
-from hello_agents.tools.response import ToolResponse, ToolStatus
-from hello_agents.tools.errors import ToolErrorCode
+from recon_core.tools.circuit_breaker import CircuitBreaker
+from recon_core.tools.registry import ToolRegistry
+from recon_core.tools.base import Tool, ToolParameter
+from recon_core.tools.response import ToolResponse, ToolStatus
+from recon_core.tools.errors import ToolErrorCode
 from typing import Dict, Any
 import time
 # 加载环境变量

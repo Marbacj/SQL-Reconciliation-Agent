@@ -16,13 +16,13 @@ from pydantic import BaseModel
 from typing import Optional
 import asyncio
 
-from hello_agents import ReActAgent, SimpleAgent, ReflectionAgent, PlanSolveAgent
-from hello_agents.core.llm import HelloAgentsLLM
-from hello_agents.core.config import Config
-from hello_agents.tools.registry import ToolRegistry
-from hello_agents.tools.base import Tool, ToolParameter
-from hello_agents.tools.response import ToolResponse
-from hello_agents.tools.errors import ToolErrorCode
+from recon_core import ReActAgent, SimpleAgent, ReflectionAgent, PlanSolveAgent
+from recon_core.core.llm import HelloAgentsLLM
+from recon_core.core.config import Config
+from recon_core.tools.registry import ToolRegistry
+from recon_core.tools.base import Tool, ToolParameter
+from recon_core.tools.response import ToolResponse
+from recon_core.tools.errors import ToolErrorCode
 # 加载环境变量
 from dotenv import load_dotenv
 load_dotenv()

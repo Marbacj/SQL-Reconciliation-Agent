@@ -24,8 +24,8 @@
 ### 基本使用
 
 ```python
-from hello_agents import ToolRegistry, ReActAgent, HelloAgentsLLM
-from hello_agents.tools.builtin import ReadTool, WriteTool, EditTool
+from recon_core import ToolRegistry, ReActAgent, HelloAgentsLLM
+from recon_core.tools.builtin import ReadTool, WriteTool, EditTool
 
 # 1. 创建工具注册表
 registry = ToolRegistry()
@@ -211,8 +211,8 @@ Agent A: Edit → 检测到冲突 ✅
 ### 示例 1：基本文件操作
 
 ```python
-from hello_agents.tools.builtin import ReadTool, WriteTool, EditTool
-from hello_agents.tools.registry import ToolRegistry
+from recon_core.tools.builtin import ReadTool, WriteTool, EditTool
+from recon_core.tools.registry import ToolRegistry
 
 # 创建工具
 registry = ToolRegistry()
@@ -276,7 +276,7 @@ if response.status.value == "error":
 ### 示例 3：批量编辑
 
 ```python
-from hello_agents.tools.builtin import MultiEditTool
+from recon_core.tools.builtin import MultiEditTool
 
 multiedit_tool = MultiEditTool(project_root="./")
 
@@ -295,8 +295,8 @@ print(response.text)  # 成功执行 3 个替换操作
 ### 示例 4：在 Agent 中使用
 
 ```python
-from hello_agents import ReActAgent, HelloAgentsLLM, ToolRegistry
-from hello_agents.tools.builtin import ReadTool, WriteTool, EditTool
+from recon_core import ReActAgent, HelloAgentsLLM, ToolRegistry
+from recon_core.tools.builtin import ReadTool, WriteTool, EditTool
 
 # 创建 Agent
 llm = HelloAgentsLLM()

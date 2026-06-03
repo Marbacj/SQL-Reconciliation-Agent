@@ -3,9 +3,9 @@
 这个文件展示了如何使用 HelloAgents 框架创建和使用自定义工具的完整流程。
 """
 
-from hello_agents import ToolRegistry, ReActAgent, HelloAgentsLLM, Config
-from hello_agents.tools import Tool, ToolParameter, ToolResponse, tool_action
-from hello_agents.tools.errors import ToolErrorCode
+from recon_core import ToolRegistry, ReActAgent, HelloAgentsLLM, Config
+from recon_core.tools import Tool, ToolParameter, ToolResponse, tool_action
+from recon_core.tools.errors import ToolErrorCode
 
 
 # ============================================

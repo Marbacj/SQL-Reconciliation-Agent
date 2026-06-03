@@ -12,7 +12,7 @@ done：
 
 ```python
 # 核心调用
-from hello_agents.agents.plan_solve_recon_agent import ReconciliationPlanAndSolveAgent
+from recon_core.agents.plan_solve_recon_agent import ReconciliationPlanAndSolveAgent
 
 agent = ReconciliationPlanAndSolveAgent(
     name="对账分析师",
@@ -117,7 +117,7 @@ done：
 5. `SQLAdapter` 统一路由：按数据源名称注册和切换连接器
 
 ```python
-from hello_agents.tools.builtin.sql_adapter import SQLAdapter, SQLiteConnector, HiveConnector
+from recon_core.tools.builtin.sql_adapter import SQLAdapter, SQLiteConnector, HiveConnector
 
 adapter = SQLAdapter()
 adapter.register("sqlite", SQLiteConnector("data/mock_reconciliation.db"))
@@ -149,7 +149,7 @@ done：
 5. `index_documents()` 批量索引导入 Qdrant
 
 ```python
-from hello_agents.tools.builtin.rag_retriever import TableDocRetriever
+from recon_core.tools.builtin.rag_retriever import TableDocRetriever
 
 retriever = TableDocRetriever(
     doc_dir="knowledge_base/table_docs",
