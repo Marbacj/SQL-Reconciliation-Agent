@@ -6,6 +6,10 @@ ENV PYTHONUNBUFFERED=1 \
 
 WORKDIR /app
 
+# 配置 pip 使用阿里云镜像（国内服务器加速）
+RUN pip config set global.index-url https://mirrors.aliyun.com/pypi/simple/ && \
+    pip config set global.trusted-host mirrors.aliyun.com
+
 # 先复制依赖文件层（缓存友好）
 COPY pyproject.toml /app/
 

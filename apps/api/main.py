@@ -7,9 +7,11 @@ from __future__ import annotations
 
 import logging
 import os
+import sqlite3
 import time
 import uuid
-from typing import Any, Dict, Optional
+from contextlib import contextmanager
+from typing import Any, Dict, List, Optional
 
 try:
     from fastapi import FastAPI, HTTPException
@@ -33,6 +35,75 @@ from recon_v2.tools import build_default_registry
 
 logger = logging.getLogger(__name__)
 
+# ── Sessions SQLite store ─────────────────────────────────────────────────────
+_SESSIONS_DB = os.getenv("SESSIONS_DB_PATH", "data/sessions.sqlite")
+
+
+def _ensure_sessions_db():
+    os.makedirs(os.path.dirname(_SESSIONS_DB) if os.path.dirname(_SESSIONS_DB) else ".", exist_ok=True)
+    conn = sqlite3.connect(_SESSIONS_DB)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS sessions (
+            id       TEXT PRIMARY KEY,
+            title    TEXT NOT NULL DEFAULT '',
+            messages TEXT NOT NULL DEFAULT '[]',
+            status   TEXT NOT NULL DEFAULT 'ok',
+            ts       INTEGER NOT NULL,
+            updated  INTEGER NOT NULL
+        )
+    """)
+    # 兼容旧表：按需添加 messages / title / updated 列
+    cols = {r[1] for r in conn.execute("PRAGMA table_info(sessions)")}
+    for col, ddl in [
+        ("messages", "TEXT NOT NULL DEFAULT '[]'"),
+        ("title",    "TEXT NOT NULL DEFAULT ''"),
+        ("updated",  "INTEGER NOT NULL DEFAULT 0"),
+    ]:
+        if col not in cols:
+            conn.execute(f"ALTER TABLE sessions ADD COLUMN {col} {ddl}")
+    conn.commit()
+    conn.close()
+
+
+@contextmanager
+def _sessions_conn():
+    conn = sqlite3.connect(_SESSIONS_DB)
+    conn.row_factory = sqlite3.Row
+    try:
+        yield conn
+        conn.commit()
+    finally:
+        conn.close()
+
+
+_ensure_sessions_db()
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+class QueryRequest(BaseModel):
+    query: str
+    db_path: Optional[str] = None
+    thread_id: Optional[str] = None
+
+
+class FeedbackRequest(BaseModel):
+    trace_id: str
+    query: str
+    sql: Optional[str] = None
+    answer: Optional[str] = None
+    correct: bool
+    intent: Optional[str] = None
+    comment: Optional[str] = None
+
+
+class SessionRecord(BaseModel):
+    id: str
+    title: str = ""
+    messages: List[Dict[str, Any]] = []   # [{role, html, query}]
+    status: str = "ok"
+    ts: int
+    updated: int = 0
+
 
 def _build_app():
     if not _HAS_FASTAPI:
@@ -52,18 +123,33 @@ def _build_app():
         allow_headers=["*"],
     )
 
-    # Serve static UI
-    _ui_dir = os.path.join(os.path.dirname(__file__), "..", "ui")
+    # Serve static UI — 挂载到根路径，所有文件直接用 /xxx.html 访问
+    _ui_dir = os.path.normpath(os.path.join(os.path.dirname(__file__), "..", "ui"))
     if os.path.isdir(_ui_dir):
-        app.mount("/ui", StaticFiles(directory=_ui_dir, html=True), name="ui")
-
+        # 显式路由优先（必须在 mount 之前注册）
         @app.get("/", include_in_schema=False)
         def _root():
-            # 根路由指向 landing page（官网首页）
             landing = os.path.join(_ui_dir, "landing.html")
             if os.path.exists(landing):
                 return FileResponse(landing)
             return FileResponse(os.path.join(_ui_dir, "index.html"))
+
+        # 将静态目录挂载到 /static，避免与 API 路由冲突
+        # 同时注册常用 HTML 页面的顶层路由
+        @app.get("/docs.html", include_in_schema=False)
+        def _docs():
+            return FileResponse(os.path.join(_ui_dir, "docs.html"))
+
+        @app.get("/index.html", include_in_schema=False)
+        def _console():
+            return FileResponse(os.path.join(_ui_dir, "index.html"))
+
+        @app.get("/landing.html", include_in_schema=False)
+        def _landing():
+            return FileResponse(os.path.join(_ui_dir, "landing.html"))
+
+        # 静态资源（CSS/JS/图片等）挂载到 /static
+        app.mount("/static", StaticFiles(directory=_ui_dir), name="static")
 
     db_path = os.getenv("EVAL_DB_PATH", "data/eval_data.sqlite")
     memory = MemoryStore()
@@ -82,11 +168,6 @@ def _build_app():
             logger.warning("Schema index init failed (non-fatal): %s", e)
 
     threading.Thread(target=_init_schema_index, daemon=True).start()
-
-    class QueryRequest(BaseModel):
-        query: str
-        db_path: Optional[str] = None
-        thread_id: Optional[str] = None
 
     @app.get("/health")
     def health():
@@ -218,6 +299,76 @@ def _build_app():
         except Exception as e:
             logger.error("feedback: write memory failed: %s", e)
             raise HTTPException(status_code=500, detail=str(e))
+
+    # ── Sessions CRUD ────────────────────────────────────────────────
+    import json as _json
+
+    @app.get("/sessions", tags=["sessions"])
+    def list_sessions(limit: int = 100):
+        """返回最近 limit 条会话摘要（不含完整 messages），按 updated 倒序。"""
+        with _sessions_conn() as conn:
+            rows = conn.execute(
+                "SELECT id, title, status, ts, updated FROM sessions ORDER BY updated DESC LIMIT ?",
+                (limit,),
+            ).fetchall()
+        return [dict(r) for r in rows]
+
+    @app.get("/sessions/{session_id}", tags=["sessions"])
+    def get_session(session_id: str):
+        """返回单个会话完整内容（含 messages）。"""
+        with _sessions_conn() as conn:
+            row = conn.execute(
+                "SELECT id, title, messages, status, ts, updated FROM sessions WHERE id=?",
+                (session_id,),
+            ).fetchone()
+        if row is None:
+            raise HTTPException(status_code=404, detail="session not found")
+        d = dict(row)
+        d["messages"] = _json.loads(d["messages"] or "[]")
+        return d
+
+    @app.post("/sessions", tags=["sessions"])
+    def create_session(rec: SessionRecord):
+        """新建会话。"""
+        now = int(time.time() * 1000)
+        with _sessions_conn() as conn:
+            conn.execute(
+                "INSERT OR IGNORE INTO sessions (id, title, messages, status, ts, updated) VALUES (?,?,?,?,?,?)",
+                (rec.id, rec.title, _json.dumps(rec.messages), rec.status, rec.ts or now, now),
+            )
+        return {"status": "ok", "id": rec.id}
+
+    @app.put("/sessions/{session_id}/messages", tags=["sessions"])
+    def append_message(session_id: str, body: Dict[str, Any]):
+        """向会话追加一条消息，并更新 updated 时间。"""
+        now = int(time.time() * 1000)
+        with _sessions_conn() as conn:
+            row = conn.execute(
+                "SELECT messages FROM sessions WHERE id=?", (session_id,)
+            ).fetchone()
+            if row is None:
+                raise HTTPException(status_code=404, detail="session not found")
+            msgs = _json.loads(row["messages"] or "[]")
+            msgs.append(body)
+            conn.execute(
+                "UPDATE sessions SET messages=?, updated=? WHERE id=?",
+                (_json.dumps(msgs), now, session_id),
+            )
+        return {"status": "ok", "count": len(msgs)}
+
+    @app.delete("/sessions/{session_id}", tags=["sessions"])
+    def delete_session(session_id: str):
+        """删除指定会话。"""
+        with _sessions_conn() as conn:
+            conn.execute("DELETE FROM sessions WHERE id=?", (session_id,))
+        return {"status": "ok"}
+
+    @app.delete("/sessions", tags=["sessions"])
+    def clear_sessions():
+        """清空所有会话。"""
+        with _sessions_conn() as conn:
+            conn.execute("DELETE FROM sessions")
+        return {"status": "ok"}
 
     @app.get("/trace/{trace_id}")
     def trace(trace_id: str):
