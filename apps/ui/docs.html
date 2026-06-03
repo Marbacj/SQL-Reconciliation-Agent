@@ -1,0 +1,1174 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>文档中心 — ReconAgent</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500;9..40,600&family=DM+Mono:wght@400;500&family=Noto+Sans+SC:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg-base:     oklch(12% 0.008 250);
+  --bg-surface:  oklch(16% 0.008 250);
+  --bg-raised:   oklch(20% 0.010 250);
+  --bg-overlay:  oklch(24% 0.010 250);
+  --border-dim:  oklch(28% 0.008 250);
+  --border:      oklch(34% 0.010 250);
+  --border-lit:  oklch(45% 0.012 250);
+  --text-muted:  oklch(50% 0.010 250);
+  --text-sub:    oklch(66% 0.010 250);
+  --text-base:   oklch(84% 0.008 250);
+  --text-bright: oklch(95% 0.005 250);
+  --accent:      oklch(72% 0.16 75);
+  --accent-dim:  oklch(60% 0.14 75);
+  --accent-glow: oklch(72% 0.16 75 / 18%);
+  --ok:          oklch(70% 0.15 150);
+  --fail:        oklch(62% 0.18 25);
+  --radius-sm:   4px;
+  --radius:      8px;
+  --radius-lg:   12px;
+}
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html { font-size: 16px; -webkit-font-smoothing: antialiased; }
+body {
+  background: var(--bg-base);
+  color: var(--text-base);
+  font-family: "DM Sans", "Noto Sans SC", "PingFang SC", system-ui, sans-serif;
+  min-height: 100svh;
+  display: flex;
+  flex-direction: column;
+}
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: var(--bg-base); }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 99px; }
+
+/* ── Header ── */
+header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 0 28px;
+  height: 56px;
+  border-bottom: 1px solid var(--border-dim);
+  background: var(--bg-base);
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  flex-shrink: 0;
+}
+.header-logo {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  text-decoration: none;
+  color: inherit;
+}
+.logo-mark {
+  width: 26px;
+  height: 26px;
+  background: var(--accent);
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.logo-mark svg { width: 14px; height: 14px; }
+.logo-text { font-size: 15px; font-weight: 600; color: var(--text-bright); letter-spacing: -0.2px; }
+.header-spacer { flex: 1; }
+.header-nav { display: flex; gap: 4px; }
+.header-nav a {
+  font-size: 13px;
+  color: var(--text-sub);
+  text-decoration: none;
+  padding: 5px 10px;
+  border-radius: var(--radius-sm);
+  transition: color 0.15s, background 0.15s;
+}
+.header-nav a:hover { color: var(--text-base); background: var(--bg-raised); }
+.header-nav a.active { color: var(--accent); }
+.btn-console {
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--bg-base);
+  background: var(--accent);
+  border: none;
+  padding: 6px 14px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  text-decoration: none;
+  transition: opacity 0.15s;
+}
+.btn-console:hover { opacity: 0.85; }
+
+/* ── Layout ── */
+.page-body {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+
+/* ── Content wrapper — centered with max-width ── */
+.content-wrapper {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  justify-content: center;
+  overflow-y: auto;
+}
+/* ── Sidebar ── */
+.sidebar {
+  width: 240px;
+  flex-shrink: 0;
+  border-right: 1px solid var(--border-dim);
+  background: var(--bg-surface);
+  padding: 24px 0;
+  position: sticky;
+  top: 56px;
+  height: calc(100vh - 56px);
+  overflow-y: auto;
+}
+.sidebar-section-label {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  padding: 0 20px 8px;
+  margin-top: 16px;
+}
+.sidebar-section-label:first-child { margin-top: 0; }
+.nav-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 20px;
+  font-size: 13.5px;
+  color: var(--text-sub);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+  border-left: 2px solid transparent;
+  user-select: none;
+}
+.nav-item:hover { background: var(--bg-raised); color: var(--text-base); }
+.nav-item.active {
+  background: var(--accent-glow);
+  color: var(--accent);
+  border-left-color: var(--accent);
+}
+.nav-item-icon {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  opacity: 0.7;
+}
+.nav-item.active .nav-item-icon { opacity: 1; }
+.nav-badge {
+  margin-left: auto;
+  font-size: 10px;
+  background: var(--bg-overlay);
+  color: var(--text-muted);
+  padding: 1px 6px;
+  border-radius: 99px;
+  font-family: "DM Mono", monospace;
+}
+
+/* ── Content area ── */
+.content {
+  width: 100%;
+  max-width: 960px;
+  padding: 40px 48px 80px;
+  flex-shrink: 0;
+}
+
+/* ── TOC (right rail) ── */
+.toc-rail {
+  width: 200px;
+  flex-shrink: 0;
+  padding: 48px 0 40px 8px;
+  position: sticky;
+  top: 56px;
+  align-self: flex-start;
+  height: calc(100vh - 56px);
+  overflow-y: auto;
+}
+.toc-label {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  padding: 0 12px 8px;
+  margin-bottom: 4px;
+}
+.toc-item {
+  display: block;
+  font-size: 12.5px;
+  color: var(--text-muted);
+  padding: 5px 12px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: color 0.15s, background 0.15s;
+  text-decoration: none;
+  user-select: none;
+  line-height: 1.4;
+}
+.toc-item:hover { color: var(--text-base); background: var(--bg-raised); }
+.toc-item.active { color: var(--accent); background: var(--accent-glow); }
+.toc-item.indent { padding-left: 22px; font-size: 12px; }
+
+/* ── Doc panel ── */
+.doc-panel { display: none; }
+.doc-panel.visible { display: block; }
+
+/* ── Typography ── */
+.doc-header { margin-bottom: 32px; }
+.doc-tag {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--accent);
+  background: var(--accent-glow);
+  padding: 3px 8px;
+  border-radius: var(--radius-sm);
+  margin-bottom: 12px;
+}
+.doc-title {
+  font-size: 28px;
+  font-weight: 600;
+  color: var(--text-bright);
+  letter-spacing: -0.5px;
+  line-height: 1.25;
+  margin-bottom: 10px;
+}
+.doc-desc {
+  font-size: 14px;
+  color: var(--text-sub);
+  line-height: 1.6;
+}
+.doc-divider {
+  border: none;
+  border-top: 1px solid var(--border-dim);
+  margin: 28px 0;
+}
+
+/* ── Section ── */
+.section { margin-bottom: 40px; }
+.section-title {
+  font-size: 17px;
+  font-weight: 600;
+  color: var(--text-bright);
+  margin-bottom: 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.section-title::before {
+  content: '';
+  display: inline-block;
+  width: 3px;
+  height: 16px;
+  background: var(--accent);
+  border-radius: 2px;
+}
+.prose {
+  font-size: 14px;
+  line-height: 1.75;
+  color: var(--text-base);
+}
+.prose p { margin-bottom: 12px; }
+.prose p:last-child { margin-bottom: 0; }
+
+/* ── Code block ── */
+.code-block {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-dim);
+  border-radius: var(--radius);
+  padding: 16px 18px;
+  font-family: "DM Mono", monospace;
+  font-size: 12.5px;
+  color: var(--text-base);
+  overflow-x: auto;
+  margin: 14px 0;
+  line-height: 1.6;
+  white-space: pre;
+}
+.code-block .kw  { color: oklch(72% 0.16 75); }
+.code-block .cm  { color: var(--text-muted); font-style: italic; }
+.code-block .str { color: var(--ok); }
+
+/* ── Table ── */
+.doc-table-wrap { overflow-x: auto; margin: 14px 0; }
+.doc-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+.doc-table th {
+  text-align: left;
+  padding: 8px 14px;
+  background: var(--bg-surface);
+  color: var(--text-sub);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  border-bottom: 1px solid var(--border);
+}
+.doc-table td {
+  padding: 9px 14px;
+  border-bottom: 1px solid var(--border-dim);
+  color: var(--text-base);
+  vertical-align: top;
+}
+.doc-table tr:last-child td { border-bottom: none; }
+.doc-table tr:hover td { background: var(--bg-raised); }
+.doc-table td:first-child { font-family: "DM Mono", monospace; font-size: 12.5px; color: var(--accent); }
+
+/* ── Callout ── */
+.callout {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-dim);
+  border-left: 3px solid var(--accent);
+  border-radius: var(--radius);
+  padding: 14px 16px;
+  font-size: 13.5px;
+  color: var(--text-sub);
+  margin: 16px 0;
+  line-height: 1.6;
+}
+.callout.ok   { border-left-color: var(--ok); }
+.callout.fail { border-left-color: var(--fail); }
+
+/* ── Arch diagram ── */
+.arch-diagram {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-dim);
+  border-radius: var(--radius-lg);
+  padding: 24px;
+  margin: 16px 0;
+  font-family: "DM Mono", monospace;
+  font-size: 12px;
+  color: var(--text-sub);
+  line-height: 1.7;
+}
+
+/* ── Pill tag ── */
+.pill {
+  display: inline-block;
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 99px;
+  background: var(--bg-overlay);
+  color: var(--text-muted);
+  margin: 2px;
+}
+.pill.green { background: oklch(70% 0.15 150 / 15%); color: var(--ok); }
+.pill.amber { background: var(--accent-glow); color: var(--accent); }
+.pill.red   { background: oklch(62% 0.18 25 / 15%); color: var(--fail); }
+
+/* ── Grid cards ── */
+.card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 12px;
+  margin: 14px 0;
+}
+.mini-card {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-dim);
+  border-radius: var(--radius);
+  padding: 14px 16px;
+  transition: border-color 0.15s, background 0.15s;
+}
+.mini-card:hover { border-color: var(--border-lit); background: var(--bg-raised); }
+.mini-card-title { font-size: 13px; font-weight: 600; color: var(--text-bright); margin-bottom: 4px; }
+.mini-card-desc  { font-size: 12px; color: var(--text-muted); line-height: 1.5; }
+
+/* ── Overview grid ── */
+.overview-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+  margin-bottom: 40px;
+}
+.overview-card {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-dim);
+  border-radius: var(--radius-lg);
+  padding: 18px 20px;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s, transform 0.15s;
+  text-decoration: none;
+}
+.overview-card:hover {
+  border-color: var(--border-lit);
+  background: var(--bg-raised);
+  transform: translateY(-2px);
+}
+.ov-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius);
+  background: var(--bg-overlay);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 12px;
+}
+.ov-title { font-size: 14px; font-weight: 600; color: var(--text-bright); margin-bottom: 4px; }
+.ov-desc  { font-size: 12px; color: var(--text-muted); line-height: 1.5; }
+
+@media (max-width: 700px) {
+  .sidebar { display: none; }
+  .toc-rail { display: none; }
+  .content { padding: 24px 20px 60px; }
+  .overview-grid { grid-template-columns: 1fr 1fr; }
+}
+@media (max-width: 1100px) {
+  .toc-rail { display: none; }
+}
+</style>
+</head>
+<body>
+
+<!-- ── Header ── -->
+<header>
+  <a href="landing.html" class="header-logo">
+    <div class="logo-mark">
+      <svg viewBox="0 0 14 14" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M2 4h10M2 7h7M2 10h5" stroke="oklch(12% 0.008 250)" stroke-width="1.5" stroke-linecap="round"/>
+      </svg>
+    </div>
+    <span class="logo-text">ReconAgent</span>
+  </a>
+  <div class="header-spacer"></div>
+  <nav class="header-nav">
+    <a href="landing.html">首页</a>
+    <a href="docs.html" class="active">文档</a>
+  </nav>
+  <a href="index.html" class="btn-console">进入控制台</a>
+</header>
+
+<!-- ── Body ── -->
+<div class="page-body">
+
+  <!-- ── Sidebar ── -->
+  <aside class="sidebar">
+    <div class="sidebar-section-label">概览</div>
+    <div class="nav-item active" onclick="showDoc('overview')">
+      <svg class="nav-item-icon" viewBox="0 0 16 16" fill="none">
+        <rect x="1.5" y="1.5" width="5" height="5" rx="1" stroke="currentColor" stroke-width="1.3"/>
+        <rect x="9.5" y="1.5" width="5" height="5" rx="1" stroke="currentColor" stroke-width="1.3"/>
+        <rect x="1.5" y="9.5" width="5" height="5" rx="1" stroke="currentColor" stroke-width="1.3"/>
+        <rect x="9.5" y="9.5" width="5" height="5" rx="1" stroke="currentColor" stroke-width="1.3"/>
+      </svg>
+      文档总览
+    </div>
+
+    <div class="sidebar-section-label">核心专题</div>
+    <div class="nav-item" onclick="showDoc('arch')">
+      <svg class="nav-item-icon" viewBox="0 0 16 16" fill="none">
+        <path d="M8 2L14 5.5V10.5L8 14L2 10.5V5.5L8 2Z" stroke="currentColor" stroke-width="1.3"/>
+        <circle cx="8" cy="8" r="2" stroke="currentColor" stroke-width="1.3"/>
+      </svg>
+      系统架构
+      <span class="nav-badge">ADR</span>
+    </div>
+    <div class="nav-item" onclick="showDoc('permission')">
+      <svg class="nav-item-icon" viewBox="0 0 16 16" fill="none">
+        <rect x="3" y="7" width="10" height="7" rx="1.5" stroke="currentColor" stroke-width="1.3"/>
+        <path d="M5 7V5a3 3 0 016 0v2" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>
+      </svg>
+      权限管控
+    </div>
+    <div class="nav-item" onclick="showDoc('rag')">
+      <svg class="nav-item-icon" viewBox="0 0 16 16" fill="none">
+        <circle cx="6" cy="6" r="4" stroke="currentColor" stroke-width="1.3"/>
+        <path d="M9.5 9.5L14 14" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>
+        <path d="M4 6h4M6 4v4" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>
+      </svg>
+      RAG 检索
+    </div>
+    <div class="nav-item" onclick="showDoc('memory')">
+      <svg class="nav-item-icon" viewBox="0 0 16 16" fill="none">
+        <path d="M8 2C5.2 2 3 4 3 6.5c0 1.5.7 2.8 1.8 3.7L5 13h6l.2-2.8C12.3 9.3 13 8 13 6.5 13 4 10.8 2 8 2z" stroke="currentColor" stroke-width="1.3"/>
+        <path d="M6 13h4" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>
+      </svg>
+      记忆系统
+    </div>
+    <div class="nav-item" onclick="showDoc('subagent')">
+      <svg class="nav-item-icon" viewBox="0 0 16 16" fill="none">
+        <circle cx="8" cy="5" r="2.5" stroke="currentColor" stroke-width="1.3"/>
+        <circle cx="3" cy="12" r="2" stroke="currentColor" stroke-width="1.3"/>
+        <circle cx="13" cy="12" r="2" stroke="currentColor" stroke-width="1.3"/>
+        <path d="M8 7.5v2.5M8 10L3 10.5M8 10l5 .5" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>
+      </svg>
+      Subagent 体系
+    </div>
+    <div class="nav-item" onclick="showDoc('evolution')">
+      <svg class="nav-item-icon" viewBox="0 0 16 16" fill="none">
+        <path d="M3 13c1-3 3-5 5-5s4 2 5 5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>
+        <path d="M8 8V3M6 5l2-2 2 2" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+      自进化机制
+    </div>
+  </aside>
+
+  <!-- ── Content ── -->
+  <div class="content-wrapper">
+  <main class="content">
+
+    <!-- OVERVIEW -->
+    <div class="doc-panel visible" id="panel-overview">
+      <div class="doc-header">
+        <div class="doc-tag">文档中心</div>
+        <h1 class="doc-title">ReconAgent 技术文档</h1>
+        <p class="doc-desc">SQL 对账 Agent 的完整技术参考，涵盖架构设计、权限管控、RAG 检索、记忆系统、Subagent 协同与自进化机制。</p>
+      </div>
+      <hr class="doc-divider">
+      <div class="overview-grid">
+        <div class="overview-card" onclick="showDoc('arch')">
+          <div class="ov-icon">
+            <svg width="18" height="18" viewBox="0 0 16 16" fill="none">
+              <path d="M8 2L14 5.5V10.5L8 14L2 10.5V5.5L8 2Z" stroke="var(--accent)" stroke-width="1.3"/>
+              <circle cx="8" cy="8" r="2" stroke="var(--accent)" stroke-width="1.3"/>
+            </svg>
+          </div>
+          <div class="ov-title">系统架构</div>
+          <div class="ov-desc">LangGraph DAG、并行执行、FastAPI 服务层设计</div>
+        </div>
+        <div class="overview-card" onclick="showDoc('permission')">
+          <div class="ov-icon">
+            <svg width="18" height="18" viewBox="0 0 16 16" fill="none">
+              <rect x="3" y="7" width="10" height="7" rx="1.5" stroke="var(--accent)" stroke-width="1.3"/>
+              <path d="M5 7V5a3 3 0 016 0v2" stroke="var(--accent)" stroke-width="1.3" stroke-linecap="round"/>
+            </svg>
+          </div>
+          <div class="ov-title">权限管控</div>
+          <div class="ov-desc">三层防护体系、AST 检查、表级字段级白名单</div>
+        </div>
+        <div class="overview-card" onclick="showDoc('rag')">
+          <div class="ov-icon">
+            <svg width="18" height="18" viewBox="0 0 16 16" fill="none">
+              <circle cx="6" cy="6" r="4" stroke="var(--accent)" stroke-width="1.3"/>
+              <path d="M9.5 9.5L14 14" stroke="var(--accent)" stroke-width="1.3" stroke-linecap="round"/>
+            </svg>
+          </div>
+          <div class="ov-title">RAG 检索</div>
+          <div class="ov-desc">Hybrid BM25 + 向量检索、RRF 融合、降级策略</div>
+        </div>
+        <div class="overview-card" onclick="showDoc('memory')">
+          <div class="ov-icon">
+            <svg width="18" height="18" viewBox="0 0 16 16" fill="none">
+              <path d="M8 2C5.2 2 3 4 3 6.5c0 1.5.7 2.8 1.8 3.7L5 13h6l.2-2.8C12.3 9.3 13 8 13 6.5 13 4 10.8 2 8 2z" stroke="var(--accent)" stroke-width="1.3"/>
+            </svg>
+          </div>
+          <div class="ov-title">记忆系统</div>
+          <div class="ov-desc">三层记忆架构、情节提炼、语义规则持久化</div>
+        </div>
+        <div class="overview-card" onclick="showDoc('subagent')">
+          <div class="ov-icon">
+            <svg width="18" height="18" viewBox="0 0 16 16" fill="none">
+              <circle cx="8" cy="5" r="2.5" stroke="var(--accent)" stroke-width="1.3"/>
+              <circle cx="3" cy="12" r="2" stroke="var(--accent)" stroke-width="1.3"/>
+              <circle cx="13" cy="12" r="2" stroke="var(--accent)" stroke-width="1.3"/>
+            </svg>
+          </div>
+          <div class="ov-title">Subagent 体系</div>
+          <div class="ov-desc">SQL生成/反思/Skill审查三专职Agent协同</div>
+        </div>
+        <div class="overview-card" onclick="showDoc('evolution')">
+          <div class="ov-icon">
+            <svg width="18" height="18" viewBox="0 0 16 16" fill="none">
+              <path d="M3 13c1-3 3-5 5-5s4 2 5 5" stroke="var(--accent)" stroke-width="1.3" stroke-linecap="round"/>
+              <path d="M8 8V3M6 5l2-2 2 2" stroke="var(--accent)" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </div>
+          <div class="ov-title">自进化机制</div>
+          <div class="ov-desc">错误学习、记忆健康、Skill 持续优化</div>
+        </div>
+      </div>
+      <div class="callout">
+        ReconAgent 基于 LangGraph 构建，所有组件可独立替换。文档持续更新，反映最新架构决策。
+      </div>
+    </div>
+
+    <!-- ARCHITECTURE -->
+    <div class="doc-panel" id="panel-arch">
+      <div class="doc-header">
+        <div class="doc-tag">架构</div>
+        <h1 class="doc-title">系统架构</h1>
+        <p class="doc-desc">基于 LangGraph DAG 的对账推理流程，每个节点纯函数、状态显式传递，让复杂多步推理可观测、可调试、可回滚。</p>
+      </div>
+      <hr class="doc-divider">
+
+      <div class="section">
+        <h2 class="section-title">整体分层</h2>
+        <div class="arch-diagram">┌─────────────────────────────────────────────┐
+│              用户 / 控制台 UI               │
+├─────────────────────────────────────────────┤
+│           FastAPI  HTTP / SSE 层            │
+├──────────────┬──────────────────────────────┤
+│  LangGraph   │  ReconAgent DAG              │
+│  Orchestrator│  plan → act → observe → end  │
+├──────────────┴──────────────────────────────┤
+│  工具层  SQL Executor · Schema Linker · RAG │
+├─────────────────────────────────────────────┤
+│  存储层  SQLite · BM25 Index · Memory Store │
+└─────────────────────────────────────────────┘</div>
+      </div>
+
+      <div class="section">
+        <h2 class="section-title">LangGraph DAG 节点</h2>
+        <div class="doc-table-wrap">
+          <table class="doc-table">
+            <thead><tr><th>节点</th><th>职责</th><th>关键输入 / 输出</th></tr></thead>
+            <tbody>
+              <tr><td>plan</td><td>将自然语言拆解为并行 SQL 子任务</td><td>user_query → parallel_plan</td></tr>
+              <tr><td>parallel_act</td><td>asyncio.gather 并发执行多条 SQL</td><td>parallel_plan → parallel_results</td></tr>
+              <tr><td>observe</td><td>汇总结果、Range Guard 合理性校验</td><td>parallel_results → observation</td></tr>
+              <tr><td>reflect</td><td>发现异常时生成修正建议</td><td>observation → reflection</td></tr>
+              <tr><td>end</td><td>格式化最终答案返回</td><td>reflection → final_answer</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="section">
+        <h2 class="section-title">并行执行机制</h2>
+        <div class="prose"><p>对账场景往往需要同时查询多张表或多个数据库，并发执行将延迟从 O(N) 降至 O(1)。</p></div>
+        <div class="code-block"><span class="kw">async def</span> parallel_act(state: GraphState) -> GraphState:
+    tasks = [execute_sql(step.sql, step.db) <span class="kw">for</span> step <span class="kw">in</span> state.parallel_plan]
+    results = <span class="kw">await</span> asyncio.gather(*tasks, return_exceptions=True)
+    ...</div>
+      </div>
+
+      <div class="section">
+        <h2 class="section-title">数据流示意</h2>
+        <div class="arch-diagram">用户输入 "比较 A/B 表 6 月差异"
+   │
+   ▼ plan 节点
+   [查询 table_A 6月, 查询 table_B 6月]
+   │
+   ▼ parallel_act（asyncio.gather）
+   [result_A, result_B]
+   │
+   ▼ observe 节点
+   差异 = result_A - result_B → 异常检测
+   │
+   ▼ reflect（如有异常）→ end
+   生成对账报告</div>
+      </div>
+
+      <div class="section">
+        <h2 class="section-title">部署结构</h2>
+        <div class="code-block">Docker Compose
+├── recon-agent   (FastAPI + LangGraph)
+└── nginx         (反向代理 + 静态文件)
+
+<span class="cm"># 快速部署</span>
+./deploy.sh ui   <span class="cm"># 秒级前端热更</span>
+./deploy.sh all  <span class="cm"># 全量重建</span></div>
+      </div>
+
+      <div class="section">
+        <h2 class="section-title">ADR 索引</h2>
+        <div class="card-grid">
+          <div class="mini-card"><div class="mini-card-title">ADR-001</div><div class="mini-card-desc">选择 LangGraph — 状态显式、易调试</div></div>
+          <div class="mini-card"><div class="mini-card-title">ADR-002</div><div class="mini-card-desc">Hybrid RAG — BM25 + 向量互补</div></div>
+          <div class="mini-card"><div class="mini-card-title">ADR-003</div><div class="mini-card-desc">三层记忆 — Working / Episodic / Semantic</div></div>
+          <div class="mini-card"><div class="mini-card-title">ADR-004</div><div class="mini-card-desc">三门沙盒 — SQL 安全执行防护</div></div>
+          <div class="mini-card"><div class="mini-card-title">ADR-005</div><div class="mini-card-desc">SQLGlot 静态安全检查</div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- PERMISSION -->
+    <div class="doc-panel" id="panel-permission">
+      <div class="doc-header">
+        <div class="doc-tag">安全</div>
+        <h1 class="doc-title">SQL 权限管控</h1>
+        <p class="doc-desc">三层防护体系，从意图过滤到运行时白名单，防止 LLM 生成危险 SQL，保障数据安全。</p>
+      </div>
+      <hr class="doc-divider">
+
+      <div class="section">
+        <h2 class="section-title">三层防护体系</h2>
+        <div class="arch-diagram">用户自然语言
+      │
+      ▼
+┌─────────────────────┐
+│  Layer 1: 意图过滤   │  关键词黑名单、意图分类
+└──────────┬──────────┘
+           │
+           ▼
+┌─────────────────────┐
+│  Layer 2: AST 静态  │  SQLGlot 解析，禁止 DDL/DML
+│  安全检查            │
+└──────────┬──────────┘
+           │
+           ▼
+┌─────────────────────┐
+│  Layer 3: 运行时     │  表级 / 字段级白名单
+│  权限过滤            │
+└──────────┬──────────┘
+           │
+           ▼
+        执行 SQL</div>
+      </div>
+
+      <div class="section">
+        <h2 class="section-title">Layer 2：SQLGlot AST 检查</h2>
+        <div class="prose"><p>只允许 SELECT，DDL/DML 在语法树层面直接拦截，不依赖字符串匹配，防止绕过。</p></div>
+        <div class="code-block"><span class="kw">import</span> sqlglot
+
+FORBIDDEN = {
+    sqlglot.exp.Drop, sqlglot.exp.Delete,
+    sqlglot.exp.Insert, sqlglot.exp.Update,
+    sqlglot.exp.Create, sqlglot.exp.AlterTable,
+}
+
+<span class="kw">def</span> check_sql_safety(sql: str) -> bool:
+    tree = sqlglot.parse_one(sql)
+    <span class="kw">for</span> node <span class="kw">in</span> tree.walk():
+        <span class="kw">if</span> type(node) <span class="kw">in</span> FORBIDDEN:
+            <span class="kw">raise</span> PermissionError(f<span class="str">"禁止操作: {type(node).__name__}"</span>)
+    <span class="kw">return</span> True</div>
+      </div>
+
+      <div class="section">
+        <h2 class="section-title">Layer 3：白名单配置</h2>
+        <div class="code-block">roles:
+  analyst:
+    allow_tables: [orders, payments]
+    deny_columns: [user_phone, id_card_number]
+  admin:
+    allow_tables: <span class="str">"*"</span>
+    deny_columns: []</div>
+      </div>
+
+      <div class="section">
+        <h2 class="section-title">错误分类与重试策略</h2>
+        <div class="doc-table-wrap">
+          <table class="doc-table">
+            <thead><tr><th>错误类型</th><th>处理方式</th><th>重试</th></tr></thead>
+            <tbody>
+              <tr><td>PermissionError</td><td>立即终止，返回拒绝提示</td><td><span class="pill red">否</span></td></tr>
+              <tr><td>SyntaxError</td><td>将错误上下文反馈给 LLM 重生成</td><td><span class="pill green">最多 3 次</span></td></tr>
+              <tr><td>TimeoutError</td><td>终止并提示查询过于复杂</td><td><span class="pill red">否</span></td></tr>
+              <tr><td>DataError</td><td>反馈给 observe 节点合理性判断</td><td><span class="pill red">否</span></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="section">
+        <h2 class="section-title">自我修正闭环</h2>
+        <div class="arch-diagram">SQL 执行失败
+      │
+      ▼ observe 节点捕获 last_sql_error
+      obs_count += 1
+      │
+      ▼ route: obs_count &lt; MAX_RETRY?
+      是 → reflect 携带错误重新生成 SQL
+      否 → 降级：返回"无法完成，请简化问题"</div>
+        <div class="callout fail">权限错误不进入重试循环，避免 LLM 反复尝试绕过限制。</div>
+      </div>
+    </div>
+
+    <!-- RAG -->
+    <div class="doc-panel" id="panel-rag">
+      <div class="doc-header">
+        <div class="doc-tag">检索</div>
+        <h1 class="doc-title">RAG 检索增强</h1>
+        <p class="doc-desc">Hybrid RAG：BM25 精确匹配 + 向量语义检索，RRF 融合排序，将业务口径定义注入 prompt 减少幻觉。</p>
+      </div>
+      <hr class="doc-divider">
+
+      <div class="section">
+        <h2 class="section-title">两种检索方式对比</h2>
+        <div class="doc-table-wrap">
+          <table class="doc-table">
+            <thead><tr><th>特性</th><th>BM25（关键词）</th><th>向量（语义）</th></tr></thead>
+            <tbody>
+              <tr><td>精确词匹配</td><td><span class="pill green">极强</span></td><td><span class="pill red">弱</span></td></tr>
+              <tr><td>同义词/近义词</td><td><span class="pill red">弱</span></td><td><span class="pill green">强</span></td></tr>
+              <tr><td>速度</td><td><span class="pill green">极快 ms 级</span></td><td><span class="pill amber">较慢</span></td></tr>
+              <tr><td>部署复杂度</td><td><span class="pill green">低（纯 Python）</span></td><td><span class="pill amber">高（需向量库）</span></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="section">
+        <h2 class="section-title">Hybrid 融合架构</h2>
+        <div class="arch-diagram">用户问题
+    │
+    ├─► BM25 检索  ──►┐
+    │                  ├─► RRF 融合排序 ──► Top-K ──► 注入 Prompt
+    └─► 向量检索  ──►┘
+
+RRF 公式: score(d) = Σ 1 / (k + rank_i(d))   k=60</div>
+      </div>
+
+      <div class="section">
+        <h2 class="section-title">知识库组织</h2>
+        <div class="code-block">knowledge_base/
+├── schema/          <span class="cm"># 表结构描述、字段注释</span>
+│   ├── orders.md
+│   └── payments.md
+├── business/        <span class="cm"># 业务口径定义</span>
+│   ├── metrics.md   <span class="cm"># GMV、DAU 等指标</span>
+│   └── rules.md     <span class="cm"># 结算规则、对账规则</span>
+└── examples/        <span class="cm"># 历史对账 SQL 示例（few-shot）</span>
+    └── golden_set.jsonl</div>
+      </div>
+
+      <div class="section">
+        <h2 class="section-title">RAG vs Memory 对比</h2>
+        <div class="doc-table-wrap">
+          <table class="doc-table">
+            <thead><tr><th>维度</th><th>RAG</th><th>Memory</th></tr></thead>
+            <tbody>
+              <tr><td>存储内容</td><td>静态业务文档</td><td>动态会话记录</td></tr>
+              <tr><td>更新频率</td><td>低（手动更新）</td><td>高（每次对话）</td></tr>
+              <tr><td>适合场景</td><td>口径定义、schema 描述</td><td>用户偏好、历史错误</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="callout ok">两者协同：RAG 提供"知识"，Memory 提供"经验"。</div>
+      </div>
+
+      <div class="section">
+        <h2 class="section-title">评估指标</h2>
+        <div class="doc-table-wrap">
+          <table class="doc-table">
+            <thead><tr><th>指标</th><th>当前值</th><th>目标</th></tr></thead>
+            <tbody>
+              <tr><td>Recall@5</td><td>82%</td><td>&gt;85%</td></tr>
+              <tr><td>MRR</td><td>0.71</td><td>&gt;0.75</td></tr>
+              <tr><td>SQL 准确率（有 RAG）</td><td>78%</td><td>&gt;80%</td></tr>
+              <tr><td>SQL 准确率（无 RAG）</td><td>61%</td><td>—</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- MEMORY -->
+    <div class="doc-panel" id="panel-memory">
+      <div class="doc-header">
+        <div class="doc-tag">记忆</div>
+        <h1 class="doc-title">记忆系统</h1>
+        <p class="doc-desc">三层记忆架构让 Agent 积累经验，从历史案例中学习，避免重复犯错。</p>
+      </div>
+      <hr class="doc-divider">
+
+      <div class="section">
+        <h2 class="section-title">三层记忆模型</h2>
+        <div class="arch-diagram">┌─────────────────────────────────────────────┐
+│          Working Memory（工作记忆）           │
+│  当前会话上下文，存活于单次对话，会话结束清除   │
+├─────────────────────────────────────────────┤
+│          Episodic Memory（情节记忆）          │
+│  历史对账案例，按 session_id 索引，可检索回放  │
+├─────────────────────────────────────────────┤
+│          Semantic Memory（语义记忆）          │
+│  提炼的业务规则、用户偏好，长期有效           │
+└─────────────────────────────────────────────┘</div>
+      </div>
+
+      <div class="section">
+        <h2 class="section-title">Working Memory</h2>
+        <div class="prose"><p>GraphState 就是 Working Memory，随节点传递，自动随 LangGraph 生命周期管理。</p></div>
+        <div class="code-block"><span class="kw">class</span> GraphState(TypedDict):
+    user_query: str
+    parallel_plan: list[SQLStep]
+    parallel_results: list[QueryResult]
+    observation: Observation
+    reflection: str
+    last_sql_error: str | None
+    obs_count: int
+    final_answer: str</div>
+      </div>
+
+      <div class="section">
+        <h2 class="section-title">Episodic Memory 数据库</h2>
+        <div class="code-block"><span class="kw">CREATE TABLE</span> episodic_case (
+    id          TEXT <span class="kw">PRIMARY KEY</span>,
+    session_id  TEXT,
+    user_query  TEXT,
+    sql_used    TEXT,
+    anomaly     BOOLEAN,
+    created_at  DATETIME
+);</div>
+      </div>
+
+      <div class="section">
+        <h2 class="section-title">记忆提升机制</h2>
+        <div class="arch-diagram">Working Memory
+      │ 会话结束，写入
+      ▼
+Episodic Memory
+      │ 相同模式出现 N 次，提炼
+      ▼
+Semantic Memory
+      │ 规则置信度衰减 / 被反驳
+      ▼
+      ╳（遗忘）</div>
+      </div>
+
+      <div class="section">
+        <h2 class="section-title">持久化存储</h2>
+        <div class="code-block">memory_store/
+├── episodic.db   <span class="cm"># 情节案例</span>
+├── semantic.db   <span class="cm"># 提炼规则</span>
+└── audit.db      <span class="cm"># 执行审计日志</span></div>
+        <div class="callout ok">全部使用 SQLite，零外部依赖，部署简单，数据文件可直接备份。</div>
+      </div>
+    </div>
+
+    <!-- SUBAGENT -->
+    <div class="doc-panel" id="panel-subagent">
+      <div class="doc-header">
+        <div class="doc-tag">协同</div>
+        <h1 class="doc-title">Subagent 体系</h1>
+        <p class="doc-desc">专职 Agent 协同：SQL 生成 / 反思 / Skill 审查，职责隔离、相互校验。</p>
+      </div>
+      <hr class="doc-divider">
+
+      <div class="section">
+        <h2 class="section-title">角色分工</h2>
+        <div class="arch-diagram">┌─────────────────────────────────────────────────────┐
+│                   ReconAgent 主流程                   │
+│  plan ──► parallel_act ──► observe ──► reflect ──► end│
+└──────────────────┬──────────────────────────────────┘
+                   │ 委托
+        ┌──────────┼──────────┐
+        ▼          ▼          ▼
+  SQL Generator  Reflect    Skill
+   Subagent      Agent     Reviewer
+   （生成）      （反思）   （审查）</div>
+      </div>
+
+      <div class="section">
+        <h2 class="section-title">SQL Generator 输出格式</h2>
+        <div class="code-block">{
+  <span class="str">"sql"</span>: <span class="str">"SELECT ..."</span>,
+  <span class="str">"confidence"</span>: 0.87,
+  <span class="str">"tables_used"</span>: [<span class="str">"orders"</span>, <span class="str">"payments"</span>],
+  <span class="str">"reasoning"</span>: <span class="str">"使用 LEFT JOIN 因为 payments 可能存在未匹配记录"</span>
+}</div>
+      </div>
+
+      <div class="section">
+        <h2 class="section-title">Subagent 通信协议</h2>
+        <div class="code-block"><span class="kw">class</span> SubagentResponse(BaseModel):
+    status: Literal[<span class="str">"DONE"</span>, <span class="str">"DONE_WITH_CONCERNS"</span>, 
+                    <span class="str">"BLOCKED"</span>, <span class="str">"NEEDS_CONTEXT"</span>]
+    output: dict
+    concerns: list[str] = []
+    context_needed: list[str] = []</div>
+        <div class="callout">BLOCKED 和 NEEDS_CONTEXT 状态会暂停主流程，等待人工干预。</div>
+      </div>
+
+      <div class="section">
+        <h2 class="section-title">Skill Reviewer 审查维度</h2>
+        <div class="doc-table-wrap">
+          <table class="doc-table">
+            <thead><tr><th>维度</th><th>检查项</th></tr></thead>
+            <tbody>
+              <tr><td>安全性</td><td>是否包含危险操作（文件删除、网络请求）</td></tr>
+              <tr><td>有效性</td><td>依赖的 API / 数据源是否仍可访问</td></tr>
+              <tr><td>质量</td><td>输出格式是否规范、是否有测试用例</td></tr>
+              <tr><td>时效性</td><td>上次更新时间，是否需要同步最新口径</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="section">
+        <h2 class="section-title">扩展新 Subagent</h2>
+        <div class="code-block"><span class="cm">---</span>
+<span class="cm">name: my-subagent</span>
+<span class="cm">description: 做什么用途，何时触发</span>
+<span class="cm">---</span>
+
+[System Prompt 内容]</div>
+        <div class="callout ok">在 skill_library/ 下新建 .md 文件，主 Agent 启动时自动扫描，无需修改代码。</div>
+      </div>
+    </div>
+
+    <!-- EVOLUTION -->
+    <div class="doc-panel" id="panel-evolution">
+      <div class="doc-header">
+        <div class="doc-tag">进化</div>
+        <h1 class="doc-title">自进化机制</h1>
+        <p class="doc-desc">Agent 在运行中自动识别失败模式、提炼经验规则、更新内部知识，不重训模型持续提升准确率。</p>
+      </div>
+      <hr class="doc-divider">
+
+      <div class="section">
+        <h2 class="section-title">进化闭环</h2>
+        <div class="arch-diagram">用户提问
+    │
+    ▼ Agent 执行
+    │
+    ▼ 结果评估（正确 / 错误 / 用户反馈）
+    │
+    ├─ 正确 ──► 写入 Episodic Memory
+    │
+    └─ 错误 ──► 错误分析 ──► 提炼规则 ──► 写入 Semantic Memory
+                                              │
+                                              ▼
+                                     下次遇到类似问题
+                                     规则自动注入 Prompt</div>
+      </div>
+
+      <div class="section">
+        <h2 class="section-title">四个进化维度</h2>
+        <div class="card-grid">
+          <div class="mini-card"><div class="mini-card-title">SQL 生成质量</div><div class="mini-card-desc">连续失败时聚类分析错误模式，提炼为语义规则</div></div>
+          <div class="mini-card"><div class="mini-card-title">Schema Linking</div><div class="mini-card-desc">记录表名/字段名错误映射，持续修正词汇表</div></div>
+          <div class="mini-card"><div class="mini-card-title">Skill 进化</div><div class="mini-card-desc">Skill Reviewer 定期标记过时 Skill，建议更新或删除</div></div>
+          <div class="mini-card"><div class="mini-card-title">记忆健康度</div><div class="mini-card-desc">清理低置信度规则，防止记忆"污染"</div></div>
+        </div>
+      </div>
+
+      <div class="section">
+        <h2 class="section-title">触发时机</h2>
+        <div class="doc-table-wrap">
+          <table class="doc-table">
+            <thead><tr><th>触发条件</th><th>进化动作</th></tr></thead>
+            <tbody>
+              <tr><td>会话结束</td><td>成功案例写入 Episodic Memory</td></tr>
+              <tr><td>SQL 连续失败 3 次</td><td>提炼错误模式为语义规则</td></tr>
+              <tr><td>用户显式纠正</td><td>高权重规则立即写入</td></tr>
+              <tr><td>每日定时任务</td><td>Memory Hygiene + Skill Review</td></tr>
+              <tr><td>手动触发</td><td>全量优化（控制台 → 设置 → 功能）</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="section">
+        <h2 class="section-title">进化边界与防护</h2>
+        <div class="callout">规则置信度低于 0.7 不生效（仅记录）；涉及权限的变更需人工确认；所有自动写入的规则标记 <code style="font-family:'DM Mono',monospace;font-size:12px">auto=true</code>，可一键回滚。进化不修改模型权重，仅修改 prompt 上下文。</div>
+      </div>
+    </div>
+
+  </main>
+
+  <!-- ── TOC Rail ── -->
+  <nav class="toc-rail" id="tocRail">
+    <div class="toc-label">ON THIS PAGE</div>
+    <!-- populated by JS -->
+  </nav>
+  </div>
+</div>
+
+<script>
+// TOC definitions per panel
+const TOC_MAP = {
+  overview: [],
+  arch: [
+    { text: '整体分层', id: 'toc-arch-0' },
+    { text: 'DAG 节点', id: 'toc-arch-1' },
+    { text: '并行执行', id: 'toc-arch-2' },
+    { text: '数据流', id: 'toc-arch-3' },
+    { text: '部署结构', id: 'toc-arch-4' },
+    { text: 'ADR 索引', id: 'toc-arch-5' },
+  ],
+  permission: [
+    { text: '三层防护体系', id: 'toc-perm-0' },
+    { text: 'AST 检查', id: 'toc-perm-1' },
+    { text: '白名单配置', id: 'toc-perm-2' },
+    { text: '错误分类与重试', id: 'toc-perm-3' },
+    { text: '自我修正闭环', id: 'toc-perm-4' },
+  ],
+  rag: [
+    { text: '检索方式对比', id: 'toc-rag-0' },
+    { text: 'Hybrid 融合架构', id: 'toc-rag-1' },
+    { text: '知识库组织', id: 'toc-rag-2' },
+    { text: 'RAG vs Memory', id: 'toc-rag-3' },
+    { text: '评估指标', id: 'toc-rag-4' },
+  ],
+  memory: [
+    { text: '三层记忆模型', id: 'toc-mem-0' },
+    { text: 'Working Memory', id: 'toc-mem-1' },
+    { text: 'Episodic Memory', id: 'toc-mem-2' },
+    { text: '记忆提升机制', id: 'toc-mem-3' },
+    { text: '持久化存储', id: 'toc-mem-4' },
+  ],
+  subagent: [
+    { text: '角色分工', id: 'toc-sub-0' },
+    { text: 'SQL Generator', id: 'toc-sub-1' },
+    { text: '通信协议', id: 'toc-sub-2' },
+    { text: 'Skill Reviewer', id: 'toc-sub-3' },
+    { text: '扩展新 Subagent', id: 'toc-sub-4' },
+  ],
+  evolution: [
+    { text: '进化闭环', id: 'toc-evo-0' },
+    { text: '四个进化维度', id: 'toc-evo-1' },
+    { text: '触发时机', id: 'toc-evo-2' },
+    { text: '进化边界', id: 'toc-evo-3' },
+  ],
+};
+
+function buildToc(id) {
+  const rail = document.getElementById('tocRail');
+  const items = TOC_MAP[id] || [];
+  if (!items.length) {
+    rail.innerHTML = '';
+    return;
+  }
+  let html = '<div class="toc-label">ON THIS PAGE</div>';
+  items.forEach((item, i) => {
+    html += `<span class="toc-item" onclick="tocClick('${id}', ${i})">${item.text}</span>`;
+  });
+  rail.innerHTML = html;
+}
+
+function tocClick(docId, sectionIdx) {
+  // highlight
+  document.querySelectorAll('.toc-item').forEach((el, i) => {
+    el.classList.toggle('active', i === sectionIdx);
+  });
+  // scroll to section
+  const panel = document.getElementById('panel-' + docId);
+  if (!panel) return;
+  const sections = panel.querySelectorAll('.section, .doc-header');
+  if (sections[sectionIdx]) {
+    sections[sectionIdx].scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+}
+
+function showDoc(id) {
+  document.querySelectorAll('.doc-panel').forEach(p => p.classList.remove('visible'));
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+
+  const panel = document.getElementById('panel-' + id);
+  if (panel) panel.classList.add('visible');
+
+  document.querySelectorAll('.nav-item').forEach(item => {
+    if (item.getAttribute('onclick') === "showDoc('" + id + "')") {
+      item.classList.add('active');
+    }
+  });
+
+  buildToc(id);
+
+  // scroll content wrapper to top
+  const wrapper = document.querySelector('.content-wrapper');
+  if (wrapper) wrapper.scrollTop = 0;
+  const content = document.querySelector('.content');
+  if (content) content.scrollTop = 0;
+}
+
+// init TOC for default visible panel
+buildToc('overview');
+</script>
+</body>
+</html>

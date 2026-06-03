@@ -156,7 +156,7 @@ main {
   display: grid;
   grid-template-columns: 280px 1fr;
   min-height: 0;
-  overflow: hidden;
+  overflow: visible;
 }
 
 /* ─────────────────────────────────────────────
@@ -227,6 +227,34 @@ aside {
 .history-dot.ok { background: var(--ok); }
 .history-dot.fail { background: var(--fail); }
 .history-dot.warn { background: var(--warn); }
+
+.new-session-btn {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-sub);
+  font-size: 11px;
+  cursor: pointer;
+  transition: background 120ms, color 120ms;
+}
+.new-session-btn:hover {
+  background: var(--bg-raised);
+  color: var(--text-bright);
+}
+
+@keyframes history-flash {
+  0%   { background: rgba(99,102,241,.18); }
+  50%  { background: rgba(99,102,241,.32); }
+  100% { background: transparent; }
+}
+.msg.history-highlight {
+  animation: history-flash 1.4s ease-out;
+  border-radius: 10px;
+}
 
 .history-text {
   font-size: 12px;
@@ -687,44 +715,32 @@ pre.sql-code {
   background: var(--accent-glow);
 }
 .settings-fab.open .fab-icon { transform: rotate(90deg); }
-.settings-fab:hover {
-  background: var(--bg-overlay);
-  border-color: var(--border-lit);
-  color: var(--text-base);
-  transform: rotate(30deg);
-}
-.settings-fab.open {
-  background: var(--accent-glow);
-  border-color: oklch(72% 0.16 75 / 40%);
-  color: var(--accent);
-  transform: rotate(90deg);
-}
 
 /* Overlay backdrop — not used (panel is inside aside) */
 
 /* Panel */
 .settings-panel {
-  position: absolute;
+  position: fixed;
   left: 0;
-  bottom: 100%;
+  bottom: 48px;
   width: 380px;
-  max-height: calc(100vh - 120px);
+  max-height: calc(100vh - 80px);
   background: var(--bg-surface);
   border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  z-index: 200;
+  border-radius: 0 var(--radius-lg) var(--radius-lg) 0;
+  z-index: 500;
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  box-shadow: 4px -4px 32px oklch(0% 0 0 / 0.5);
-  transform: translateY(12px) scale(0.97);
+  box-shadow: 4px 4px 32px oklch(0% 0 0 / 0.5);
+  transform: translateX(-16px) scale(0.97);
   opacity: 0;
   pointer-events: none;
   transform-origin: bottom left;
   transition: transform 0.22s var(--ease-out), opacity 0.22s var(--ease-out);
 }
 .settings-panel.open {
-  transform: translateY(0) scale(1);
+  transform: translateX(0) scale(1);
   opacity: 1;
   pointer-events: auto;
 }
@@ -1262,22 +1278,16 @@ footer {
 <main>
   <!-- Sidebar — History only -->
   <aside>
-    <div class="sidebar-section" style="padding-bottom: 8px;">
+    <div class="sidebar-section" style="padding-bottom: 8px; display:flex; align-items:center; justify-content:space-between;">
       <div class="sidebar-label">History</div>
+      <button class="new-session-btn" onclick="newSession()" title="新建会话">
+        <svg width="13" height="13" viewBox="0 0 13 13" fill="none">
+          <path d="M6.5 1v11M1 6.5h11" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+        </svg>
+        新会话
+      </button>
     </div>
     <ul class="history-list" id="history-list">
-      <li class="history-item" onclick="loadHistory(0)">
-        <span class="history-dot ok"></span>
-        <span class="history-text">昨天订单总金额是多少</span>
-      </li>
-      <li class="history-item" onclick="loadHistory(1)">
-        <span class="history-dot ok"></span>
-        <span class="history-text">按渠道统计每个渠道的订单总金额</span>
-      </li>
-      <li class="history-item" onclick="loadHistory(2)">
-        <span class="history-dot warn"></span>
-        <span class="history-text">支付成功的订单平均金额</span>
-      </li>
     </ul>
 
     <!-- Settings button — sidebar bottom -->
@@ -1547,10 +1557,144 @@ footer {
 /* ─────────────────────────────────────────────
    State
 ───────────────────────────────────────────── */
-const API_BASE = 'http://localhost:8000';
+const API_BASE = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+  ? 'http://localhost:8000'
+  : `http://${window.location.hostname}:8000`;
+/* ─────────────────────────────────────────────
+   Multi-session state
+───────────────────────────────────────────── */
+let currentSessionId = null;   // 当前会话 ID
 let queryHistory = [];
 let historyIndex = -1;
 let isLoading = false;
+
+/* ── Session helpers ── */
+function genId() { return 'sess_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7); }
+
+async function createSessionOnServer(id, title) {
+  try {
+    await fetch(`${API_BASE}/sessions`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id, title, messages: [], status: 'ok', ts: Date.now(), updated: Date.now() }),
+    });
+  } catch {}
+}
+
+async function appendMessageToServer(sessionId, msg) {
+  try {
+    await fetch(`${API_BASE}/sessions/${sessionId}/messages`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(msg),
+    });
+  } catch {}
+}
+
+async function loadSessionFromServer(sessionId) {
+  const res = await fetch(`${API_BASE}/sessions/${sessionId}`);
+  if (!res.ok) throw new Error('not found');
+  return res.json();
+}
+
+async function listSessionsFromServer() {
+  try {
+    const res = await fetch(`${API_BASE}/sessions?limit=60`);
+    if (res.ok) return res.json();
+  } catch {}
+  return [];
+}
+
+/* ── Sidebar: 渲染会话列表条目 ── */
+function renderSidebarItem(id, title, active) {
+  const list = document.getElementById('history-list');
+  const li = document.createElement('li');
+  li.className = 'history-item' + (active ? ' active' : '');
+  li.dataset.sessionId = id;
+  li.innerHTML = `<span class="history-dot ok"></span><span class="history-text">${escapeHtml(title || '新会话')}</span>`;
+  list.insertBefore(li, list.firstChild);
+  li.onclick = () => switchToSession(id);
+  return li;
+}
+
+/* ── 切换到已有会话 ── */
+async function switchToSession(id) {
+  if (id === currentSessionId) return;
+  // 高亮侧边栏
+  document.querySelectorAll('#history-list .history-item').forEach(el => {
+    el.classList.toggle('active', el.dataset.sessionId === id);
+  });
+
+  // 清空聊天区，重放该会话的消息
+  const messages = document.getElementById('messages');
+  const es = document.getElementById('empty-state');
+  if (es) es.remove();
+  messages.innerHTML = '';
+
+  try {
+    const session = await loadSessionFromServer(id);
+    currentSessionId = id;
+    (session.messages || []).forEach(m => {
+      const userMsg = document.createElement('div');
+      userMsg.className = 'msg user';
+      userMsg.innerHTML = `<span class="msg-role">You</span><div class="msg-body">${escapeHtml(m.query || '')}</div>`;
+      messages.appendChild(userMsg);
+      const agentMsg = document.createElement('div');
+      agentMsg.className = 'msg agent';
+      agentMsg.innerHTML = `<span class="msg-role">Agent</span><div class="msg-body">${m.html || ''}</div>`;
+      messages.appendChild(agentMsg);
+    });
+    messages.scrollTop = messages.scrollHeight;
+  } catch {
+    currentSessionId = id;
+  }
+}
+
+/* ── 初始化：拉取会话列表 ── */
+async function restoreSessions() {
+  const sessions = await listSessionsFromServer();
+  if (!sessions.length) return;
+
+  const list = document.getElementById('history-list');
+  // sessions 已按 updated 倒序（最新在前），insertBefore firstChild → 最新在顶
+  // 但因为 insertBefore 逐条插入，最后插入的在最前，所以要反转遍历
+  [...sessions].reverse().forEach(s => {
+    renderSidebarItem(s.id, s.title, false);
+  });
+
+  // 自动打开最新会话
+  const latest = sessions[0];
+  if (latest) await switchToSession(latest.id);
+}
+
+function newSession() {
+  // 清空当前内存状态
+  currentSessionId = null;
+  queryHistory = [];
+  historyIndex = -1;
+  historyMsgNodes.length = 0;
+  // 清空聊天区
+  const messages = document.getElementById('messages');
+  messages.innerHTML = '';
+  // 恢复 empty-state
+  const es = document.createElement('div');
+  es.className = 'empty-state';
+  es.id = 'empty-state';
+  es.innerHTML = `
+    <div>
+      <div class="empty-title">对你的数据库<strong>提问</strong>，<br>Agent 自动生成 SQL 并对账</div>
+    </div>
+    <div class="suggestions">
+      <div class="suggestion-chip" onclick="fillQuery('今天订单总金额是多少')">\u4eca天订单总金额是多少</div>
+      <div class="suggestion-chip" onclick="fillQuery('按渠道统计支付笔数')">\u6309渠道统计支付笔数</div>
+      <div class="suggestion-chip" onclick="fillQuery('找出已支付但没有退款的订单')">\u627e出已支付但没有退款的订单</div>
+      <div class="suggestion-chip" onclick="fillQuery('支付和订单金额不一致的记录')">\u652f付和订单金额不一致的记录</div>
+    </div>`;
+  messages.appendChild(es);
+  // 去掉所有 active 高亮（历史列表本身保留，不清空）
+  document.querySelectorAll('#history-list .history-item').forEach(el => el.classList.remove('active'));
+  document.getElementById('query-input').focus();
+}
 
 /* ─────────────────────────────────────────────
    Settings panel
@@ -1967,7 +2111,7 @@ async function sendQuery() {
     agentMsg.appendChild(bodyEl);
 
     // Add to history sidebar
-    addHistoryItem(text, 'ok');
+    await addHistoryItem(text, 'ok', agentMsg);
 
   } catch (err) {
     clearInterval(animInterval);
@@ -1992,7 +2136,7 @@ async function sendQuery() {
     bodyEl.innerHTML = content;
     agentMsg.appendChild(bodyEl);
 
-    addHistoryItem(text, 'ok');
+    await addHistoryItem(text, 'ok', agentMsg);
   }
 
   messages.scrollTop = messages.scrollHeight;
@@ -2054,24 +2198,37 @@ function getMockResult(query) {
 }
 
 /* ─────────────────────────────────────────────
-   History sidebar
+   History sidebar (legacy scroll-to helpers kept for in-session use)
 ───────────────────────────────────────────── */
-function addHistoryItem(text, status) {
-  const list = document.getElementById('history-list');
-  const li = document.createElement('li');
-  li.className = 'history-item active';
-  li.innerHTML = `
-    <span class="history-dot ${status}"></span>
-    <span class="history-text">${escapeHtml(text)}</span>
-  `;
-  list.querySelectorAll('.history-item.active').forEach(el => el.classList.remove('active'));
-  list.insertBefore(li, list.firstChild);
+// msgNode 与 history-item 的对应表（最新在前，仅用于当前会话内滚动）
+const historyMsgNodes = [];
+
+async function addHistoryItem(text, status, msgNode) {
+  // 若当前无会话，则创建一个新会话
+  if (!currentSessionId) {
+    currentSessionId = genId();
+    await createSessionOnServer(currentSessionId, text);  // 必须等 POST 完成再 PUT
+    renderSidebarItem(currentSessionId, text, true);
+  }
+
+  // 存入节点（最新插前面）
+  historyMsgNodes.unshift(msgNode || null);
+
+  // 追加消息到后端
+  appendMessageToServer(currentSessionId, {
+    query: text,
+    html: msgNode ? msgNode.querySelector('.msg-body')?.innerHTML || '' : '',
+    status,
+    ts: Date.now(),
+  });
 }
 
 function loadHistory(idx) {
-  // highlight
-  const items = document.getElementById('history-list').querySelectorAll('.history-item');
-  items.forEach((el, i) => el.classList.toggle('active', i === idx));
+  const node = historyMsgNodes[idx];
+  if (!node) return;
+  node.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  node.classList.add('history-highlight');
+  setTimeout(() => node.classList.remove('history-highlight'), 1400);
 }
 
 /* ─────────────────────────────────────────────
@@ -2100,6 +2257,8 @@ window.addEventListener('load', () => {
       ring.style.strokeDashoffset = '16';
     }, 400);
   }
+  // 恢复历史会话
+  restoreSessions();
 });
 
 /* auto-focus input */

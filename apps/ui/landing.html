@@ -917,8 +917,8 @@ footer {
   </ul>
 
   <div class="nav-cta">
-    <a href="docs/v2/architecture.md" class="btn btn-ghost">产品文档</a>
-    <a href="ui/index.html" class="btn btn-primary">
+    <a href="docs.html" class="btn btn-ghost">产品文档</a>
+    <a href="index.html" class="btn btn-primary">
       <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
         <path d="M2 7h10M7 2l5 5-5 5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
       </svg>
@@ -953,13 +953,13 @@ footer {
   </p>
 
   <div class="hero-cta">
-    <a href="ui/index.html" class="btn btn-primary btn-lg">
+    <a href="index.html" class="btn btn-primary btn-lg">
       <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
         <path d="M2 8h12M8 2l6 6-6 6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
       </svg>
       立即体验
     </a>
-    <a href="docs/v2/architecture.md" class="btn btn-ghost btn-lg">
+    <a href="docs.html" class="btn btn-ghost btn-lg">
       查看文档
       <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
         <path d="M3 7h8M7 3l4 4-4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
@@ -1204,45 +1204,46 @@ footer {
   <h2 class="section-title" data-reveal>快速了解<br>系统设计</h2>
 
   <div class="doc-grid">
-    <a href="docs/v2/architecture.md" class="doc-card" data-reveal data-delay="0">
+    <a href="docs.html" class="doc-card" data-reveal data-delay="0" onclick="event.preventDefault();location.href='docs.html'">
       <svg class="doc-card-icon" viewBox="0 0 32 32" fill="none">
-        <rect x="4" y="4" width="10" height="10" rx="2" stroke="currentColor" stroke-width="1.5"/>
-        <rect x="18" y="4" width="10" height="10" rx="2" stroke="currentColor" stroke-width="1.5"/>
-        <rect x="4" y="18" width="10" height="10" rx="2" stroke="currentColor" stroke-width="1.5"/>
-        <rect x="18" y="18" width="10" height="10" rx="2" stroke="currentColor" stroke-width="1.5"/>
+        <path d="M16 4L28 11V21L16 28L4 21V11L16 4Z" stroke="currentColor" stroke-width="1.5"/>
+        <circle cx="16" cy="16" r="4" stroke="currentColor" stroke-width="1.5"/>
       </svg>
       <div class="doc-card-title">系统架构</div>
-      <div class="doc-card-desc">整体设计思路、模块划分与技术选型，了解 LangGraph 编排和混合 RAG 架构。</div>
-      <div class="doc-card-link">阅读 → architecture.md</div>
+      <div class="doc-card-desc">LangGraph DAG 设计、并行执行机制、FastAPI 服务层与部署结构全景。</div>
+      <div class="doc-card-link">查看文档 →</div>
     </a>
 
-    <a href="docs/v2/runbook.md" class="doc-card" data-reveal data-delay="0.08">
+    <a href="docs.html" class="doc-card" data-reveal data-delay="0.08">
       <svg class="doc-card-icon" viewBox="0 0 32 32" fill="none">
-        <path d="M6 8h20M6 14h16M6 20h12M6 26h8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+        <rect x="6" y="14" width="20" height="14" rx="3" stroke="currentColor" stroke-width="1.5"/>
+        <path d="M10 14V10a6 6 0 0112 0v4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
       </svg>
-      <div class="doc-card-title">运维手册</div>
-      <div class="doc-card-desc">部署步骤、环境变量配置、docker-compose 一键启动与常见问题排查指南。</div>
-      <div class="doc-card-link">阅读 → runbook.md</div>
+      <div class="doc-card-title">权限管控</div>
+      <div class="doc-card-desc">三层防护体系、SQLGlot AST 检查、表级字段级白名单与审计日志。</div>
+      <div class="doc-card-link">查看文档 →</div>
     </a>
 
-    <a href="docs/v2/adr/ADR-001-langgraph.md" class="doc-card" data-reveal data-delay="0.16">
+    <a href="docs.html" class="doc-card" data-reveal data-delay="0.16">
       <svg class="doc-card-icon" viewBox="0 0 32 32" fill="none">
-        <circle cx="16" cy="16" r="11" stroke="currentColor" stroke-width="1.5"/>
-        <path d="M16 10v6l4 3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+        <circle cx="12" cy="12" r="8" stroke="currentColor" stroke-width="1.5"/>
+        <path d="M19 19L28 28" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
       </svg>
-      <div class="doc-card-title">架构决策记录</div>
-      <div class="doc-card-desc">5 份 ADR 文档，记录 LangGraph 选型、混合 RAG、三层 Memory 等核心决策背后的权衡。</div>
-      <div class="doc-card-link">阅读 → ADR-001 ～ ADR-005</div>
+      <div class="doc-card-title">RAG 检索 / 记忆系统</div>
+      <div class="doc-card-desc">Hybrid BM25 + 向量检索、三层记忆架构、情节提炼与语义规则持久化。</div>
+      <div class="doc-card-link">查看文档 →</div>
     </a>
 
-    <a href="openspec/changes/sql-recon-agent-v2-rebuild/design.md" class="doc-card" data-reveal data-delay="0.24">
+    <a href="docs.html" class="doc-card" data-reveal data-delay="0.24">
       <svg class="doc-card-icon" viewBox="0 0 32 32" fill="none">
-        <path d="M8 6h16v20H8z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>
-        <path d="M12 11h8M12 15h8M12 19h5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
+        <circle cx="16" cy="10" r="5" stroke="currentColor" stroke-width="1.5"/>
+        <circle cx="6" cy="24" r="4" stroke="currentColor" stroke-width="1.5"/>
+        <circle cx="26" cy="24" r="4" stroke="currentColor" stroke-width="1.5"/>
+        <path d="M16 15v5M16 20L6 21M16 20l10 1" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
       </svg>
-      <div class="doc-card-title">详细设计文档</div>
-      <div class="doc-card-desc">10 份规格说明书，覆盖 SQL Safety、Memory System、Eval Harness 等每个子系统。</div>
-      <div class="doc-card-link">阅读 → design.md</div>
+      <div class="doc-card-title">Subagent / 自进化</div>
+      <div class="doc-card-desc">专职 Agent 协同体系、自进化闭环、记忆健康度与 Skill 持续优化机制。</div>
+      <div class="doc-card-link">查看文档 →</div>
     </a>
   </div>
 </section>
@@ -1257,7 +1258,7 @@ footer {
     本地 5 分钟启动，无需配置数据库，内置 50 个评测案例验证效果。
   </p>
   <div class="cta-buttons" data-reveal>
-    <a href="ui/index.html" class="btn btn-primary btn-lg">
+    <a href="index.html" class="btn btn-primary btn-lg">
       <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
         <path d="M2 8h12M8 2l6 6-6 6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
       </svg>
@@ -1276,8 +1277,8 @@ footer {
 <footer>
   <span class="footer-copy">© 2026 ReconAgent — SQL Reconciliation Agent v2</span>
   <ul class="footer-links">
-    <li><a href="docs/v2/architecture.md">文档</a></li>
-    <li><a href="ui/index.html">控制台</a></li>
+    <li><a href="docs.html">文档</a></li>
+    <li><a href="index.html">控制台</a></li>
     <li><a href="https://github.com/Marbacj/SQL-Reconciliation-Agent" target="_blank">GitHub</a></li>
   </ul>
 </footer>

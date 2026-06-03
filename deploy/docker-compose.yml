@@ -25,6 +25,7 @@ services:
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://phoenix:6006
     volumes:
       - ../data:/app/data
+      - ../apps/ui:/app/apps/ui  # 前端静态文件直接挂载，deploy.sh ui 即时生效
     depends_on:
       redis:
         condition: service_started
