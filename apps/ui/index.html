@@ -42,16 +42,16 @@
 
 /* ─────────── Reset ─────────── */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-html { font-size: 16px; -webkit-font-smoothing: antialiased; }
+html { font-size: 16px; -webkit-font-smoothing: antialiased; height: 100%; overflow: hidden; }
 
 body {
   background: var(--bg-base);
   color: var(--text-base);
   font-family: "DM Sans", "Noto Sans SC", "PingFang SC", system-ui, sans-serif;
-  min-height: 100svh;
+  height: 100dvh;
   display: grid;
-  grid-template-rows: auto 1fr auto;
-  overflow-x: hidden;
+  grid-template-rows: auto 1fr;
+  overflow: hidden;
 }
 
 /* ─────────── Font import ─────────── */
@@ -156,7 +156,7 @@ main {
   display: grid;
   grid-template-columns: 280px 1fr;
   min-height: 0;
-  overflow: visible;
+  overflow: hidden;
 }
 
 /* ─────────────────────────────────────────────
@@ -167,6 +167,7 @@ aside {
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  min-height: 0;
   background: var(--bg-base);
   position: relative;  /* anchor for settings panel */
 }
@@ -273,6 +274,7 @@ aside {
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  min-height: 0;
 }
 
 .messages {
@@ -1007,6 +1009,145 @@ pre.sql-code {
 .evo-log-line .warn { color: var(--warn); }
 
 /* ─────────────────────────────────────────────
+   Agent Config Modal
+───────────────────────────────────────────── */
+.agent-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: oklch(0% 0 0 / 0.55);
+  z-index: 900;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s var(--ease-out);
+}
+.agent-modal-backdrop.open {
+  opacity: 1;
+  pointer-events: auto;
+}
+.agent-modal {
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  width: 420px;
+  max-width: calc(100vw - 40px);
+  max-height: calc(100vh - 80px);
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 8px 48px oklch(0% 0 0 / 0.6);
+  transform: translateY(8px) scale(0.98);
+  transition: transform 0.2s var(--ease-out);
+  overflow: hidden;
+}
+.agent-modal-backdrop.open .agent-modal {
+  transform: translateY(0) scale(1);
+}
+.agent-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px 12px;
+  border-bottom: 1px solid var(--border-dim);
+  flex-shrink: 0;
+}
+.agent-modal-title {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--text-bright);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.agent-modal-title .agent-dot-lg {
+  width: 10px; height: 10px;
+  border-radius: 50%;
+  background: var(--ok);
+  flex-shrink: 0;
+}
+.agent-modal-title .agent-dot-lg.idle { background: var(--border-lit); }
+.agent-modal-body {
+  overflow-y: auto;
+  padding: 20px;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.agent-modal-footer {
+  padding: 12px 20px;
+  border-top: 1px solid var(--border-dim);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+.agent-modal-footer .sp-btn { flex: 1; padding: 8px 12px; font-size: 12.5px; }
+.agent-modal-footer .sp-btn.primary { flex: 2; }
+
+/* Toggle inside agent modal */
+.agent-toggle-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px;
+  background: var(--bg-raised);
+  border: 1px solid var(--border-dim);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.agent-toggle-row:hover { background: var(--bg-overlay); }
+.agent-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 99px;
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  border: 1px solid;
+}
+.agent-badge.active { color: var(--ok); border-color: oklch(62% 0.18 145 / 40%); background: oklch(62% 0.18 145 / 8%); }
+.agent-badge.idle   { color: var(--text-muted); border-color: var(--border-dim); background: var(--bg-raised); }
+
+/* Add agent form */
+.add-agent-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: oklch(0% 0 0 / 0.55);
+  z-index: 910;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s var(--ease-out);
+}
+.add-agent-modal-backdrop.open {
+  opacity: 1;
+  pointer-events: auto;
+}
+.add-agent-modal {
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  width: 400px;
+  max-width: calc(100vw - 40px);
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 8px 48px oklch(0% 0 0 / 0.6);
+  transform: translateY(8px) scale(0.98);
+  transition: transform 0.2s var(--ease-out);
+  overflow: hidden;
+}
+.add-agent-modal-backdrop.open .add-agent-modal {
+  transform: translateY(0) scale(1);
+}
+
+/* ─────────────────────────────────────────────
    Input bar
 ───────────────────────────────────────────── */
 .input-area {
@@ -1467,34 +1608,14 @@ footer {
   <div class="sp-body" id="tab-features" style="display:none">
     <!-- Subagent -->
     <div class="sp-section">
-      <div class="sp-section-label">Subagent 配置</div>
-      <div class="sp-agent-list">
-        <div class="sp-agent-item">
-          <div class="sp-agent-dot active"></div>
-          <div class="sp-agent-info">
-            <div class="sp-agent-name">SQL Generator</div>
-            <div class="sp-agent-desc">DeepSeek-V3 · plan_solve 模式</div>
-          </div>
-          <button class="sp-btn" onclick="openAgentConfig('sql_gen')">配置</button>
-        </div>
-        <div class="sp-agent-item">
-          <div class="sp-agent-dot active"></div>
-          <div class="sp-agent-info">
-            <div class="sp-agent-name">Reflect Agent</div>
-            <div class="sp-agent-desc">汇总答案 · 写入 Memory</div>
-          </div>
-          <button class="sp-btn" onclick="openAgentConfig('reflect')">配置</button>
-        </div>
-        <div class="sp-agent-item">
-          <div class="sp-agent-dot idle"></div>
-          <div class="sp-agent-info">
-            <div class="sp-agent-name">Skill Reviewer</div>
-            <div class="sp-agent-desc">自动分析失败 Case · 已停用</div>
-          </div>
-          <button class="sp-btn" onclick="openAgentConfig('reviewer')">配置</button>
-        </div>
+      <div class="sp-section-label" style="display:flex;align-items:center;justify-content:space-between">
+        <span>Subagent 配置</span>
+        <span id="agentLoadMsg" style="font-size:10px;color:var(--text-muted)"></span>
       </div>
-      <button class="sp-btn" style="width:100%;margin-top:10px">
+      <div class="sp-agent-list" id="agentList">
+        <div style="padding:24px;text-align:center;color:var(--text-muted);font-size:12px">加载中…</div>
+      </div>
+      <button class="sp-btn" style="width:100%;margin-top:10px" onclick="openAddAgent()">
         + 添加自定义 Subagent
       </button>
     </div>
@@ -1545,6 +1666,124 @@ footer {
   </div>
     </div><!-- end settingsPanel -->
   </aside>
+
+  <!-- Agent Config Modal -->
+  <div class="agent-modal-backdrop" id="agentModalBackdrop" onclick="closeAgentModal(event)">
+    <div class="agent-modal" onclick="event.stopPropagation()">
+      <div class="agent-modal-header">
+        <div class="agent-modal-title">
+          <div class="agent-dot-lg" id="agentModalDot"></div>
+          <span id="agentModalTitle">Subagent 配置</span>
+          <span id="agentModalBadge" class="agent-badge active"></span>
+        </div>
+        <button class="sp-close" onclick="closeAgentModal()">
+          <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+            <path d="M1 1l10 10M11 1L1 11" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+          </svg>
+        </button>
+      </div>
+      <div class="agent-modal-body">
+        <div class="sp-field">
+          <label class="sp-label">Agent 名称</label>
+          <input class="sp-input" id="agentCfgName" type="text" placeholder="SQL Generator"/>
+        </div>
+        <div class="sp-field">
+          <label class="sp-label">描述</label>
+          <input class="sp-input" id="agentCfgDesc" type="text" placeholder="简短描述 Agent 职责"/>
+        </div>
+        <div class="sp-field">
+          <label class="sp-label">底层模型</label>
+          <select class="sp-select" id="agentCfgModel">
+            <option value="DeepSeek-V3">DeepSeek-V3</option>
+            <option value="DeepSeek-R1">DeepSeek-R1</option>
+            <option value="GPT-4o">GPT-4o</option>
+            <option value="GPT-4o-mini">GPT-4o-mini</option>
+            <option value="Claude-3.5-Sonnet">Claude-3.5-Sonnet</option>
+            <option value="Qwen2.5-72B">Qwen2.5-72B</option>
+          </select>
+        </div>
+        <div class="sp-field">
+          <label class="sp-label">运行模式</label>
+          <select class="sp-select" id="agentCfgMode">
+            <option value="plan_solve">plan_solve — 规划优先</option>
+            <option value="reflect">reflect — 反思汇总</option>
+            <option value="review">review — 错误审查</option>
+            <option value="direct">direct — 直接输出</option>
+          </select>
+        </div>
+        <div class="sp-field">
+          <label class="sp-label">System Prompt（可选）</label>
+          <textarea class="sp-input" id="agentCfgPrompt" rows="5"
+            style="resize:vertical;font-family:'DM Mono',monospace;font-size:11.5px;line-height:1.6"
+            placeholder="留空使用默认 Prompt …"></textarea>
+        </div>
+        <div class="agent-toggle-row" onclick="agentModalToggleEnabled()">
+          <div class="sp-toggle-info">
+            <span class="sp-toggle-name">启用此 Agent</span>
+            <span class="sp-toggle-desc">停用后不参与 Pipeline 调度</span>
+          </div>
+          <div class="toggle" id="agentCfgEnabled"></div>
+        </div>
+      </div>
+      <div class="agent-modal-footer">
+        <button class="sp-btn" id="agentDeleteBtn" onclick="deleteCurrentAgent()">删除</button>
+        <button class="sp-btn" onclick="closeAgentModal()">取消</button>
+        <button class="sp-btn primary" onclick="saveAgentConfig()">保存配置</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Add Agent Modal -->
+  <div class="add-agent-modal-backdrop" id="addAgentBackdrop" onclick="closeAddAgent(event)">
+    <div class="add-agent-modal" onclick="event.stopPropagation()">
+      <div class="agent-modal-header">
+        <div class="agent-modal-title">+ 添加自定义 Subagent</div>
+        <button class="sp-close" onclick="closeAddAgent()">
+          <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+            <path d="M1 1l10 10M11 1L1 11" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+          </svg>
+        </button>
+      </div>
+      <div class="agent-modal-body">
+        <div class="sp-field">
+          <label class="sp-label">Agent ID（英文，唯一）</label>
+          <input class="sp-input" id="addAgentId" type="text" placeholder="my_custom_agent"/>
+        </div>
+        <div class="sp-field">
+          <label class="sp-label">Agent 名称</label>
+          <input class="sp-input" id="addAgentName" type="text" placeholder="My Custom Agent"/>
+        </div>
+        <div class="sp-field">
+          <label class="sp-label">描述</label>
+          <input class="sp-input" id="addAgentDesc" type="text" placeholder="负责…"/>
+        </div>
+        <div class="sp-field">
+          <label class="sp-label">底层模型</label>
+          <select class="sp-select" id="addAgentModel">
+            <option value="DeepSeek-V3">DeepSeek-V3</option>
+            <option value="DeepSeek-R1">DeepSeek-R1</option>
+            <option value="GPT-4o">GPT-4o</option>
+            <option value="GPT-4o-mini">GPT-4o-mini</option>
+            <option value="Claude-3.5-Sonnet">Claude-3.5-Sonnet</option>
+            <option value="Qwen2.5-72B">Qwen2.5-72B</option>
+          </select>
+        </div>
+        <div class="sp-field">
+          <label class="sp-label">运行模式</label>
+          <select class="sp-select" id="addAgentMode">
+            <option value="plan_solve">plan_solve — 规划优先</option>
+            <option value="reflect">reflect — 反思汇总</option>
+            <option value="review">review — 错误审查</option>
+            <option value="direct">direct — 直接输出</option>
+          </select>
+        </div>
+      </div>
+      <div class="agent-modal-footer">
+        <button class="sp-btn" onclick="closeAddAgent()">取消</button>
+        <button class="sp-btn primary" onclick="submitAddAgent()">创建 Subagent</button>
+      </div>
+    </div>
+  </div>
 
   <!-- Chat -->
   <div class="chat-area">
@@ -1762,6 +2001,7 @@ function switchTab(el, tabId) {
   document.querySelectorAll('.sp-body').forEach(b => b.style.display = 'none');
   document.getElementById(tabId).style.display = 'block';
   if (tabId === 'tab-kb') kbLoadList();
+  if (tabId === 'tab-features') loadAgentList();
 }
 
 function toggleSwitch(id) {
@@ -1890,9 +2130,174 @@ async function kbUploadFile(input) {
   } catch(e) { alert(e.message || '上传失败'); }
 }
 
-function openAgentConfig(agentId) {
-  alert(`[TODO] ${agentId} 配置面板（待扩展）`);
+/* ─────────────────────────────────────────────
+   Subagent 配置管理
+───────────────────────────────────────────── */
+let _agentList = [];          // 全量缓存
+let _currentAgentId = null;   // 当前编辑的 agent id
+
+/** 渲染 Subagent 列表 */
+function renderAgentList(agents) {
+  const el = document.getElementById('agentList');
+  if (!agents || agents.length === 0) {
+    el.innerHTML = '<div style="padding:24px;text-align:center;color:var(--text-muted);font-size:12px">暂无 Subagent</div>';
+    return;
+  }
+  el.innerHTML = agents.map(a => `
+    <div class="sp-agent-item" id="agent-item-${a.id}">
+      <div class="sp-agent-dot ${a.enabled ? 'active' : 'idle'}"></div>
+      <div class="sp-agent-info">
+        <div class="sp-agent-name">${a.name}</div>
+        <div class="sp-agent-desc">${a.model} · ${a.mode} 模式${a.enabled ? '' : ' · 已停用'}</div>
+      </div>
+      <button class="sp-btn" onclick="openAgentConfig('${a.id}')">配置</button>
+    </div>
+  `).join('');
 }
+
+/** 加载所有 Subagent */
+async function loadAgentList() {
+  const msgEl = document.getElementById('agentLoadMsg');
+  try {
+    const r = await fetch(`${API_BASE}/agents`);
+    const d = await r.json();
+    _agentList = d.agents || [];
+    renderAgentList(_agentList);
+    if (msgEl) msgEl.textContent = `共 ${_agentList.length} 个`;
+  } catch {
+    if (msgEl) msgEl.textContent = '未连接';
+    const el = document.getElementById('agentList');
+    if (el) el.innerHTML = '<div style="padding:24px;text-align:center;color:var(--text-muted);font-size:12px">加载失败，请检查 API 连接</div>';
+  }
+}
+
+/** 打开 Agent 配置弹窗 */
+function openAgentConfig(agentId) {
+  const agent = _agentList.find(a => a.id === agentId);
+  if (!agent) { alert('Agent 未找到，请刷新后重试'); return; }
+
+  _currentAgentId = agentId;
+  const isBuiltin = ['sql_gen', 'reflect', 'reviewer'].includes(agentId);
+
+  // 填充表单
+  document.getElementById('agentCfgName').value    = agent.name;
+  document.getElementById('agentCfgDesc').value    = agent.description || '';
+  document.getElementById('agentCfgModel').value   = agent.model || 'DeepSeek-V3';
+  document.getElementById('agentCfgMode').value    = agent.mode  || 'plan_solve';
+  document.getElementById('agentCfgPrompt').value  = agent.system_prompt || '';
+
+  const enabledToggle = document.getElementById('agentCfgEnabled');
+  enabledToggle.classList.toggle('on', !!agent.enabled);
+
+  // 标题 & 状态
+  document.getElementById('agentModalTitle').textContent = agent.name;
+  const dot = document.getElementById('agentModalDot');
+  dot.className = 'agent-dot-lg' + (agent.enabled ? '' : ' idle');
+  const badge = document.getElementById('agentModalBadge');
+  badge.textContent = agent.enabled ? '运行中' : '已停用';
+  badge.className   = 'agent-badge ' + (agent.enabled ? 'active' : 'idle');
+
+  // 内置 Agent 禁止删除
+  const deleteBtn = document.getElementById('agentDeleteBtn');
+  deleteBtn.disabled = isBuiltin;
+  deleteBtn.style.opacity = isBuiltin ? '0.35' : '1';
+  deleteBtn.title = isBuiltin ? '内置 Agent 不可删除' : '删除此 Agent';
+
+  document.getElementById('agentModalBackdrop').classList.add('open');
+}
+
+function closeAgentModal(e) {
+  if (e && e.target !== document.getElementById('agentModalBackdrop')) return;
+  document.getElementById('agentModalBackdrop').classList.remove('open');
+  _currentAgentId = null;
+}
+
+function agentModalToggleEnabled() {
+  const t = document.getElementById('agentCfgEnabled');
+  t.classList.toggle('on');
+}
+
+async function saveAgentConfig() {
+  if (!_currentAgentId) return;
+  const payload = {
+    name:          document.getElementById('agentCfgName').value.trim(),
+    description:   document.getElementById('agentCfgDesc').value.trim(),
+    model:         document.getElementById('agentCfgModel').value,
+    mode:          document.getElementById('agentCfgMode').value,
+    system_prompt: document.getElementById('agentCfgPrompt').value,
+    enabled:       document.getElementById('agentCfgEnabled').classList.contains('on'),
+  };
+  if (!payload.name) { alert('Agent 名称不能为空'); return; }
+  try {
+    const r = await fetch(`${API_BASE}/agents/${_currentAgentId}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    if (!r.ok) { const d = await r.json(); throw new Error(d.detail || '保存失败'); }
+    await loadAgentList();
+    document.getElementById('agentModalBackdrop').classList.remove('open');
+    _currentAgentId = null;
+  } catch(e) { alert(e.message || '保存失败'); }
+}
+
+async function deleteCurrentAgent() {
+  if (!_currentAgentId) return;
+  if (!confirm(`确定要删除此 Agent 吗？`)) return;
+  try {
+    const r = await fetch(`${API_BASE}/agents/${_currentAgentId}`, { method: 'DELETE' });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.detail || '删除失败');
+    await loadAgentList();
+    document.getElementById('agentModalBackdrop').classList.remove('open');
+    _currentAgentId = null;
+  } catch(e) { alert(e.message || '删除失败'); }
+}
+
+/** 添加自定义 Agent */
+function openAddAgent() {
+  document.getElementById('addAgentId').value   = '';
+  document.getElementById('addAgentName').value = '';
+  document.getElementById('addAgentDesc').value = '';
+  document.getElementById('addAgentModel').value = 'DeepSeek-V3';
+  document.getElementById('addAgentMode').value  = 'plan_solve';
+  document.getElementById('addAgentBackdrop').classList.add('open');
+}
+
+function closeAddAgent(e) {
+  if (e && e.target !== document.getElementById('addAgentBackdrop')) return;
+  document.getElementById('addAgentBackdrop').classList.remove('open');
+}
+
+async function submitAddAgent() {
+  const id   = document.getElementById('addAgentId').value.trim().replace(/\s+/g, '_');
+  const name = document.getElementById('addAgentName').value.trim();
+  const desc = document.getElementById('addAgentDesc').value.trim();
+  if (!id)   { alert('Agent ID 不能为空'); return; }
+  if (!name) { alert('Agent 名称不能为空'); return; }
+  const payload = {
+    id,
+    name,
+    description: desc,
+    model:   document.getElementById('addAgentModel').value,
+    mode:    document.getElementById('addAgentMode').value,
+    enabled: true,
+    system_prompt: '',
+  };
+  try {
+    const r = await fetch(`${API_BASE}/agents`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.detail || '创建失败');
+    await loadAgentList();
+    document.getElementById('addAgentBackdrop').classList.remove('open');
+  } catch(e) { alert(e.message || '创建失败'); }
+}
+
+// openAgentConfig 定义在上方 Subagent 配置管理区域
 
 async function loadEvoStatus() {
   const logEl   = document.getElementById('evoLog');

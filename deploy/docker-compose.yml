@@ -15,7 +15,7 @@ services:
       - LITELLM_MODEL=${LITELLM_MODEL:-deepseek/deepseek-chat}
       # 数据库
       - SQLITE_DB_PATH=/app/data/recon_v2.sqlite
-      - EVAL_DB_PATH=/app/data/eval_data.sqlite
+      - EVAL_DB_PATH=/app/data/unified_test.db
       # Schema Linking：json 模式（本地文件，无需 Milvus）
       - SCHEMA_STORE=json
       - SCHEMA_INDEX_PATH=/app/data/schema_index.json

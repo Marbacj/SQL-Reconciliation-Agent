@@ -75,13 +75,64 @@ def _cosine(a: Dict[str, float], b: Dict[str, float]) -> float:
 
 # ── 文档构建 ──────────────────────────────────────────
 
-def _build_table_doc(table: TableInfo) -> str:
+def _load_kb_cn_map(kb_dir: str = "knowledge_base/table_docs") -> dict[str, str]:
+    """从 KB 文档提取 {表名小写: 中文描述} 映射，用于 Schema Linking 跨语言召回。"""
+    import os as _os
+    import re as _re
+
+    result: dict[str, str] = {}
+    if not _os.path.isdir(kb_dir):
+        return result
+
+    for fname in _os.listdir(kb_dir):
+        if not fname.endswith(".md"):
+            continue
+        try:
+            raw = open(_os.path.join(kb_dir, fname), encoding="utf-8").read()
+        except Exception:
+            continue
+
+        cn = " ".join(_re.findall(r'[\u4e00-\u9fff\uff00-\uffef]+', raw))
+        if not cn:
+            continue
+
+        # 提取 KB 中引用的表名（文档中有 `## 表: Products`` 等标记）
+        table_matches = _re.findall(r'表[:\s]*`?([A-Za-z_][A-Za-z0-9_]*)`?', raw)
+        if table_matches:
+            for t in table_matches:
+                result[t.lower()] = cn
+        else:
+            # 无表名标记：用文件名本身当 key
+            fname_no_ext = fname.replace(".md", "")
+            result[fname_no_ext.lower()] = cn
+
+    return result
+
+
+def _build_table_doc(
+    table: TableInfo,
+    kb_chinese_map: dict[str, str] = None,
+) -> str:
     """把一张表的 schema 信息拼成适合向量化的文本。
 
-    包含：表名 + 字段名 + 枚举值 + 隐式业务词扩展。
-    生产环境可在此拼入资产平台的中文业务注释。
+    包含：表名 + 字段名 + 枚举值 + KB 文档中文描述 + 隐式业务词扩展。
+    中文描述用于跨语言召回（如"低脂可回收产品"能命中 lc_Products）。
     """
-    parts = [table.name]
+    raw_name = table.name
+    parts = [raw_name]
+
+    # 注入 KB 文档中的中文描述（如果有），提升中文查询召回率
+    if kb_chinese_map:
+        # 全匹配
+        cn = kb_chinese_map.get(raw_name.lower(), "")
+        if not cn:
+            # 模糊匹配：表名的一部分出现在 KB key 中
+            for k, v in kb_chinese_map.items():
+                if raw_name.lower() in k or k in raw_name.lower():
+                    cn = v
+                    break
+        if cn:
+            parts.append(cn)
 
     for col in table.columns:
         # 字段名（下划线拆分，让 "order_id" → "order id" 两个 token 都能匹配）
@@ -192,11 +243,14 @@ class SchemaIndexer:
         t0 = time.time()
         logger.info("SchemaIndexer: building index for %s ...", self.db_path)
 
+        # 从 KB 文档中预加载中文描述映射，传递给 _build_table_doc 提升中文召回
+        kb_cn_map = _load_kb_cn_map()
+
         schema_info: SchemaInfo = inspect_schema(db_path=self.db_path, adapter=self.adapter)
         entries: List[TableEntry] = []
 
         for table in schema_info.tables:
-            doc = _build_table_doc(table)
+            doc = _build_table_doc(table, kb_chinese_map=kb_cn_map)
             vec = _embed(doc)
             enum_summary = {
                 c.name: c.enum_values
@@ -395,10 +449,25 @@ def get_default_linker(
     """获取全局 SchemaLinker 单例。
 
     首次调用时：尝试加载索引文件，若不存在且 auto_build=True 则实时构建。
+    若缓存的索引与当前 db_path 对应的数据库不匹配（表列表不同），自动重建。
     """
     global _global_indexer, _global_linker
 
     if _global_linker is not None:
+        # 校验缓存的索引是否属于当前 db_path
+        cached_db = getattr(_global_indexer, "_db_path", "")
+        if cached_db and cached_db != db_path and db_path:
+            logger.info(
+                "SchemaLinker: db_path changed %s → %s, rebuilding index",
+                cached_db, db_path,
+            )
+            # 强制重建
+            _global_indexer = SchemaIndexer(
+                db_path=db_path, index_path=index_path, adapter=adapter,
+            )
+            _global_indexer.build_and_save()
+            _global_linker = SchemaLinker(_global_indexer)
+            return _global_linker
         return _global_linker
 
     _global_indexer = SchemaIndexer(

@@ -70,6 +70,13 @@ def build_graph(checkpointer: Optional[Any] = None):
 
 def run_once(query: str, db_path: str, ctx: Optional[AgentContext] = None) -> dict:
     """便捷入口:跑一次 query,返回最终 state dict。"""
+    # 确保 .env 被加载（CLI / 测试场景下不会自动加载）
+    try:
+        from dotenv import load_dotenv
+        load_dotenv(override=False)
+    except ImportError:
+        pass
+
     if ctx is None:
         ctx = AgentContext(query=query, db_path=db_path)
         ctx.tools = build_default_registry(db_path)

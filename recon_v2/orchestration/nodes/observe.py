@@ -24,6 +24,31 @@ from recon_v2.orchestration.state import GraphState
 logger = logging.getLogger(__name__)
 
 
+# ── SQL 格式化 ─────────────────────────────────────────────────────
+
+try:
+    import sqlparse
+    _HAS_SQLPARSE = True
+except ImportError:
+    _HAS_SQLPARSE = False
+
+
+def _format_sql(sql: str) -> str:
+    """用 sqlparse 格式化 SQL，失败则原样返回。"""
+    if not sql or not _HAS_SQLPARSE:
+        return sql
+    try:
+        formatted = sqlparse.format(
+            sql,
+            reindent=True,
+            keyword_case="upper",
+            strip_whitespace=True,
+        )
+        return formatted if formatted else sql
+    except Exception:
+        return sql
+
+
 MAX_ACT_ITER = 6  # 单次 query 最多 6 次工具调用
 
 
@@ -118,10 +143,91 @@ def _summarize_observations(obs: list) -> str:
     if not last.get("success"):
         return f"工具失败：{last.get('error', '未知错误')}"
     if "rows" in last:
-        return f"返回 {last.get('row_count', 0)} 行结果。"
+        row_count = last.get('row_count', 0)
+        rows = last.get("rows", [])
+        columns = last.get("columns", [])
+        # 构造表格形式的数据展示
+        data_text = _format_rows(rows, columns, max_rows=20)
+        return f"返回 {row_count} 行结果。\n\n{data_text}"
     if "content" in last:
         return last["content"][:200]
     return "工具调用成功。"
+
+
+def _format_value(v) -> str:
+    """格式化单个值，数字加千分位，None 显示为 N/A。"""
+    if v is None:
+        return "N/A"
+    try:
+        f = float(v)
+        # 整数型不显示小数
+        if f == int(f) and abs(f) < 1e15:
+            return f"{int(f):,}"
+        return f"{f:,.2f}"
+    except (TypeError, ValueError):
+        return str(v)
+
+
+def _format_rows(rows: list, columns: list, max_rows: int = 20) -> str:
+    """将查询结果格式化为可读文本。
+
+    - 单行单列：直接展示 "列名: 值"
+    - 单行多列：每个字段一行 "列名: 值"
+    - 多行：表格形式展示
+    """
+    if not rows:
+        return "（空结果）"
+
+    total = len(rows)
+    first_row = rows[0]
+
+    def get_row_values(row):
+        if isinstance(row, dict):
+            return list(row.values())
+        return list(row)
+
+    # 单行结果 → key: value 列表形式更易读
+    if total == 1:
+        values = get_row_values(first_row)
+        if columns and len(columns) == len(values):
+            lines = [f"{col}: {_format_value(val)}" for col, val in zip(columns, values)]
+        else:
+            lines = [_format_value(v) for v in values]
+        return "\n".join(lines)
+
+    # 多行结果 → 表格形式
+    lines = []
+    display_rows = rows[:max_rows]
+
+    if columns:
+        # 计算每列最大宽度
+        col_widths = [len(str(c)) for c in columns]
+        for row in display_rows:
+            vals = get_row_values(row)
+            for i, v in enumerate(vals):
+                if i < len(col_widths):
+                    col_widths[i] = max(col_widths[i], len(_format_value(v)))
+
+        header = " | ".join(str(c).ljust(col_widths[i]) for i, c in enumerate(columns))
+        separator = "-+-".join("-" * w for w in col_widths)
+        lines.append(header)
+        lines.append(separator)
+
+        for row in display_rows:
+            vals = get_row_values(row)
+            cells = []
+            for i, v in enumerate(vals):
+                w = col_widths[i] if i < len(col_widths) else 0
+                cells.append(_format_value(v).ljust(w))
+            lines.append(" | ".join(cells))
+    else:
+        for row in display_rows:
+            lines.append(" | ".join(_format_value(v) for v in get_row_values(row)))
+
+    if total > max_rows:
+        lines.append(f"\n... 共 {total:,} 行，仅展示前 {max_rows} 行")
+
+    return "\n".join(lines)
 
 
 # ── observe_node ─────────────────────────────────────────────────────
@@ -145,9 +251,11 @@ def observe_node(state: GraphState) -> dict:
         # 提取 SQL（如果最后是 sql_runner）
         sql = ""
         if last_call.get("name") == "sql_runner":
-            sql = last_obs.get("final_sql") or last_call.get("args", {}).get("sql", "")
-            if sql and sql.strip().upper() in {"REJECT", "CLARIFY"}:
+            raw_sql = last_obs.get("final_sql") or last_call.get("args", {}).get("sql", "")
+            if raw_sql and raw_sql.strip().upper() in {"REJECT", "CLARIFY"}:
                 sql = ""
+            else:
+                sql = _format_sql(raw_sql)
 
         # 构造 answer
         summary = _summarize_observations(observations)

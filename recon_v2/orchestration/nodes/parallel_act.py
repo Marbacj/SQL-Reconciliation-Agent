@@ -101,7 +101,7 @@ async def _exec_sql(task: Dict[str, Any], ctx) -> Dict[str, Any]:
             finally:
                 conn.close()
         else:
-            out = runner.run(sql=sql)
+            out = runner.run(ctx, {"sql": sql, "apply_limit": True})
             return {
                 "success": out.success,
                 "rows": out.rows if out.rows else [],

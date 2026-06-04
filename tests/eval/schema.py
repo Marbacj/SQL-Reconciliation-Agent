@@ -34,7 +34,7 @@ class GoldenCase(BaseModel):
 
     id: str = Field(..., description="全局唯一 ID，建议 kebab-case")
     query: str = Field(..., description="自然语言查询")
-    intent_label: IntentLabel = Field(..., description="期望命中的 intent")
+    intent_label: Optional[IntentLabel] = Field(default=None, description="期望命中的 intent（LeetCode 题目可为空）")
     difficulty: Difficulty = Field(...)
     expected_sql: str = Field(..., description="参考 SQL（结果集 hash 用）")
     expected_result_summary: str = Field(..., description="参考自然语言答案，用于 LLM-as-Judge")
@@ -82,7 +82,8 @@ def stats(cases: List[GoldenCase]) -> dict:
     intent_count: dict = {}
     diff_count: dict = {}
     for c in cases:
-        intent_count[c.intent_label.value] = intent_count.get(c.intent_label.value, 0) + 1
+        if c.intent_label is not None:
+            intent_count[c.intent_label.value] = intent_count.get(c.intent_label.value, 0) + 1
         diff_count[c.difficulty.value] = diff_count.get(c.difficulty.value, 0) + 1
     return {
         "total": len(cases),

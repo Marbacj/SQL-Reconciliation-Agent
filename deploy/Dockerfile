@@ -23,6 +23,7 @@ RUN pip install --upgrade pip && \
       "cachetools>=5.3" \
       "fastapi>=0.110" \
       "uvicorn>=0.27" \
+      "python-multipart>=0.0.9" \
       "qdrant-client>=1.8.0" \
       "redis>=5.0.0" \
       "opentelemetry-sdk>=1.24.0" \
@@ -33,10 +34,15 @@ RUN pip install --upgrade pip && \
 COPY recon_v2 /app/recon_v2
 COPY apps /app/apps
 COPY tests /app/tests
+COPY knowledge_base /app/knowledge_base
+COPY data /app/data
 COPY .env.example /app/.env.example
 
 # 确保 data 目录存在
 RUN mkdir -p /app/data
+
+# 构建统一测试数据库（enterprise + leetcode 合并）
+RUN python3 data/merge_unified_db.py
 
 ENV PYTHONPATH=/app
 EXPOSE 8000

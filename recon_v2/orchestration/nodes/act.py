@@ -199,6 +199,18 @@ def _llm_pick_tool(ctx, query: str, intent: str, plan: List[str], state: Optiona
                     f"Generate a DIFFERENT, corrected SQL.\n"
                 )
 
+        # ---- RAG 检索：注入知识库中的题目解读/业务规则 ----
+        rag_hint = ""
+        if ctx.rag is not None:
+            try:
+                rag_docs = ctx.rag.search(query, k=2)
+                if rag_docs:
+                    rag_hint = "\nKnowledge base hints (use as reference, NOT as direct answer):\n" + "\n".join(
+                        f"  - {d.text[:300]}" for d in rag_docs
+                    )
+            except Exception:
+                pass
+
         sys_msg = (
             "You are a SQL reconciliation agent. Generate ONE tool call to solve the query.\n"
             "Respond ONLY with JSON (no markdown, no explanation): "
@@ -206,6 +218,7 @@ def _llm_pick_tool(ctx, query: str, intent: str, plan: List[str], state: Optiona
             f"{schema_desc}\n"
             f"{_SQLITE_RULES}\n"
             f"{_SQL_PRINCIPLES}"
+            f"{rag_hint}"
             f"{correction_hint}"
         )
         usr = (
@@ -236,7 +249,7 @@ def _llm_pick_tool(ctx, query: str, intent: str, plan: List[str], state: Optiona
             result["args"] = args
         return result
     except Exception as e:
-        logger.warning("LLM tool pick failed: %s", e)
+        logger.warning("LLM tool pick failed: %s", e, exc_info=True)
         return None
 
 
@@ -284,13 +297,16 @@ def act_node(state: GraphState) -> dict:
     with span("act", attributes={"intent": intent, "step": step_counter}) as s:
         # 1) 优先 LLM 决策（传入 state 以注入 self-correction 上下文）
         tool_call = _llm_pick_tool(ctx, query, intent, plan, state=state)
+        logger.debug("[ACT] query='%s' intent=%s _llm_pick_tool → %s", query, intent, tool_call)
 
         # 2) 降级：模板生成 SQL → 直接调 sql_runner
         if tool_call is None:
             sql = _template_solve(query, intent)
+            logger.debug("[ACT] _template_solve → sql='%s'", sql)
             if sql is None:
                 # 极端兜底
                 sql = f"SELECT * FROM orders WHERE created_at >= DATE('now', '-1 day') LIMIT 10"
+                logger.warning("[ACT] ⚠️ FALLBACK SQL: query='%s' intent=%s → generic SQL", query, intent)
             tool_call = {"name": "sql_runner", "args": {"sql": sql, "apply_limit": True}}
 
         # 3) 执行工具

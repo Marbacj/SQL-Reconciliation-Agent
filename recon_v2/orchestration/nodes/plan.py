@@ -78,7 +78,10 @@ def plan_node(state: GraphState) -> dict:
         else:
             ctx.mode = "plan_solve"
 
+        logger.debug("[PLAN] query='%s' intent=%s → mode=%s", query, intent, ctx.mode)
+
         steps = _PLAN_TEMPLATES.get(intent, _PLAN_TEMPLATES["simple_query"])
+        logger.debug("[PLAN] template_steps=%s", steps)
 
         # 对 numeric_diff / time_window_recon 等多表意图：LLM 有能力时生成并行步骤的具体 SQL
         # 先判断是否应该走并行路径
@@ -127,6 +130,7 @@ def plan_node(state: GraphState) -> dict:
                 lines = [l.strip() for l in out.content.split("\n") if l.strip()][:5]
                 if lines:
                     steps = lines
+                    logger.debug("[PLAN] LLM refined steps=%s", lines)
 
                 # 并行路径：让 LLM 为 parallel 步骤填充具体 SQL
                 if use_parallel:

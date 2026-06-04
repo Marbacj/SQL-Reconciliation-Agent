@@ -8,6 +8,7 @@ from pydantic import Field
 
 from recon_v2.adapters.base import SQLAdapter
 from recon_v2.adapters.sqlite_adapter import SQLiteAdapter
+from recon_v2.infra.dialect_adapter import adapt_mysql_to_sqlite
 from recon_v2.infra.sql_safety import apply_limit_guard, is_safe
 from recon_v2.tools.base import ToolBase, ToolInput, ToolOutput
 
@@ -50,13 +51,15 @@ class SQLRunnerTool(ToolBase[SQLRunnerInput, SQLRunnerOutput]):
                 final_sql=inp.sql,
             )
 
-        # 2) 自动加 LIMIT
-        sql = inp.sql
+        # 2) MySQL→SQLite 方言适配（后处理转换层）
+        sql = adapt_mysql_to_sqlite(inp.sql)
+
+        # 3) 自动加 LIMIT
         modified = False
         if inp.apply_limit:
             sql, modified = apply_limit_guard(sql, default_limit=1000)
 
-        # 3) EXPLAIN 预校验
+        # 4) EXPLAIN 预校验
         explain_res = self.adapter.explain(sql)
         if not explain_res.success:
             return SQLRunnerOutput(
@@ -65,7 +68,7 @@ class SQLRunnerTool(ToolBase[SQLRunnerInput, SQLRunnerOutput]):
                 final_sql=sql,
             )
 
-        # 4) 实际执行
+        # 5) 实际执行
         res = self.adapter.execute(sql)
         if not res.success:
             return SQLRunnerOutput(
