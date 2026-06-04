@@ -37,6 +37,11 @@ from recon_v2.tools import build_default_registry
 
 logger = logging.getLogger(__name__)
 
+logging.basicConfig(
+    level=os.getenv("LOG_LEVEL", "INFO").upper(),
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+)
+
 # ── Sessions SQLite store ─────────────────────────────────────────────────────
 _SESSIONS_DB = os.getenv("SESSIONS_DB_PATH", "data/sessions.sqlite")
 
@@ -195,6 +200,13 @@ def _build_app():
         ctx.tools = build_default_registry(target_db)
         ctx.memory = memory
         ctx.rag = retriever
+        # ── 初始化 LLM Gateway（支持环境变量配置）──
+        try:
+            from recon_v2.infra.llm_gateway import LLMGateway
+            ctx.llm = LLMGateway()
+            logger.debug("LLM Gateway initialized for trace_id=%s: %s/%s", ctx.trace_id, ctx.llm.provider, ctx.llm.model)
+        except Exception as e:
+            logger.warning("LLM Gateway init failed (will use template fallback): %s", e)
         ctx_registry.register(ctx)
         try:
             graph = build_graph()
@@ -466,6 +478,143 @@ def _build_app():
         path.unlink()
         logger.info("kb_delete: removed %s", safe)
         return {"status": "ok", "name": safe}
+
+    # ── Subagent 配置 CRUD ──────────────────────────────────────────────────
+    import json as _json_agents
+
+    _AGENTS_DB = os.getenv("AGENTS_DB_PATH", "data/agents.sqlite")
+
+    def _ensure_agents_db():
+        os.makedirs(os.path.dirname(_AGENTS_DB) if os.path.dirname(_AGENTS_DB) else ".", exist_ok=True)
+        conn = sqlite3.connect(_AGENTS_DB)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS agents (
+                id          TEXT PRIMARY KEY,
+                name        TEXT NOT NULL,
+                description TEXT NOT NULL DEFAULT '',
+                model       TEXT NOT NULL DEFAULT '',
+                mode        TEXT NOT NULL DEFAULT '',
+                enabled     INTEGER NOT NULL DEFAULT 1,
+                system_prompt TEXT NOT NULL DEFAULT '',
+                updated     INTEGER NOT NULL DEFAULT 0
+            )
+        """)
+        # 默认内置 Subagent
+        defaults = [
+            ("sql_gen",  "SQL Generator",   "NL2SQL 生成核心，将自然语言查询转换为 SQL",   "DeepSeek-V3",  "plan_solve", 1, ""),
+            ("reflect",  "Reflect Agent",   "汇总多轮查询结果，写入 Episodic Memory",      "DeepSeek-V3",  "reflect",    1, ""),
+            ("reviewer", "Skill Reviewer",  "自动分析失败 Case，提炼 Semantic Rule",       "DeepSeek-V3",  "review",     0, ""),
+        ]
+        for row in defaults:
+            conn.execute(
+                "INSERT OR IGNORE INTO agents (id, name, description, model, mode, enabled, system_prompt, updated) VALUES (?,?,?,?,?,?,?,?)",
+                (*row, int(time.time() * 1000)),
+            )
+        conn.commit()
+        conn.close()
+
+    _ensure_agents_db()
+
+    @contextmanager
+    def _agents_conn():
+        conn = sqlite3.connect(_AGENTS_DB)
+        conn.row_factory = sqlite3.Row
+        try:
+            yield conn
+            conn.commit()
+        finally:
+            conn.close()
+
+    class AgentConfig(BaseModel):
+        id: Optional[str] = None
+        name: str
+        description: str = ""
+        model: str = "DeepSeek-V3"
+        mode: str = "plan_solve"
+        enabled: bool = True
+        system_prompt: str = ""
+
+    @app.get("/agents", tags=["agents"])
+    def list_agents():
+        """返回所有 Subagent 配置列表。"""
+        with _agents_conn() as conn:
+            rows = conn.execute(
+                "SELECT id, name, description, model, mode, enabled, system_prompt, updated FROM agents ORDER BY updated ASC"
+            ).fetchall()
+        return {"agents": [dict(r) for r in rows]}
+
+    @app.get("/agents/{agent_id}", tags=["agents"])
+    def get_agent(agent_id: str):
+        """返回单个 Subagent 配置。"""
+        with _agents_conn() as conn:
+            row = conn.execute(
+                "SELECT id, name, description, model, mode, enabled, system_prompt, updated FROM agents WHERE id=?",
+                (agent_id,),
+            ).fetchone()
+        if row is None:
+            raise HTTPException(status_code=404, detail="agent not found")
+        return dict(row)
+
+    @app.post("/agents", tags=["agents"])
+    def create_agent(cfg: AgentConfig):
+        """新建自定义 Subagent 配置。"""
+        agent_id = cfg.id or str(uuid.uuid4())[:8]
+        now = int(time.time() * 1000)
+        with _agents_conn() as conn:
+            existing = conn.execute("SELECT id FROM agents WHERE id=?", (agent_id,)).fetchone()
+            if existing:
+                raise HTTPException(status_code=409, detail="agent id already exists")
+            conn.execute(
+                "INSERT INTO agents (id, name, description, model, mode, enabled, system_prompt, updated) VALUES (?,?,?,?,?,?,?,?)",
+                (agent_id, cfg.name, cfg.description, cfg.model, cfg.mode, int(cfg.enabled), cfg.system_prompt, now),
+            )
+        logger.info("agents: created %s (%s)", agent_id, cfg.name)
+        return {"status": "ok", "id": agent_id}
+
+    @app.put("/agents/{agent_id}", tags=["agents"])
+    def update_agent(agent_id: str, cfg: AgentConfig):
+        """更新 Subagent 配置。"""
+        now = int(time.time() * 1000)
+        with _agents_conn() as conn:
+            row = conn.execute("SELECT id FROM agents WHERE id=?", (agent_id,)).fetchone()
+            if row is None:
+                raise HTTPException(status_code=404, detail="agent not found")
+            conn.execute(
+                "UPDATE agents SET name=?, description=?, model=?, mode=?, enabled=?, system_prompt=?, updated=? WHERE id=?",
+                (cfg.name, cfg.description, cfg.model, cfg.mode, int(cfg.enabled), cfg.system_prompt, now, agent_id),
+            )
+        logger.info("agents: updated %s", agent_id)
+        return {"status": "ok", "id": agent_id}
+
+    @app.patch("/agents/{agent_id}/toggle", tags=["agents"])
+    def toggle_agent(agent_id: str):
+        """切换 Subagent 启用/停用状态。"""
+        now = int(time.time() * 1000)
+        with _agents_conn() as conn:
+            row = conn.execute("SELECT id, enabled FROM agents WHERE id=?", (agent_id,)).fetchone()
+            if row is None:
+                raise HTTPException(status_code=404, detail="agent not found")
+            new_enabled = 0 if row["enabled"] else 1
+            conn.execute(
+                "UPDATE agents SET enabled=?, updated=? WHERE id=?",
+                (new_enabled, now, agent_id),
+            )
+        logger.info("agents: toggled %s -> enabled=%s", agent_id, new_enabled)
+        return {"status": "ok", "id": agent_id, "enabled": bool(new_enabled)}
+
+    @app.delete("/agents/{agent_id}", tags=["agents"])
+    def delete_agent(agent_id: str):
+        """删除自定义 Subagent（内置 Subagent 不可删除）。"""
+        builtin_ids = {"sql_gen", "reflect", "reviewer"}
+        if agent_id in builtin_ids:
+            raise HTTPException(status_code=403, detail="内置 Subagent 不可删除，可以停用")
+        with _agents_conn() as conn:
+            row = conn.execute("SELECT id FROM agents WHERE id=?", (agent_id,)).fetchone()
+            if row is None:
+                raise HTTPException(status_code=404, detail="agent not found")
+            conn.execute("DELETE FROM agents WHERE id=?", (agent_id,))
+        logger.info("agents: deleted %s", agent_id)
+        return {"status": "ok", "id": agent_id}
 
     return app
 

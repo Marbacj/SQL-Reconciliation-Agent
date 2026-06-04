@@ -8,9 +8,12 @@
 
 from __future__ import annotations
 
+import logging
 import re
 from dataclasses import dataclass, field
 from typing import Dict, List
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -74,20 +77,19 @@ def chunk_text_doc(doc_id: str, text: str, max_chars: int = 800) -> List[DocChun
     return chunks
 
 
-def build_default_kb() -> List[DocChunk]:
-    """v2 默认知识库（精简版）：仅保留 RAG 不可替代的静态业务知识。
+def build_default_kb(kb_dir: str = "") -> List[DocChunk]:
+    """v2 默认知识库：静态业务规则 + 磁盘文档自动加载。
 
-    已移除的内容（由更优方案替代）：
-    - 表 Schema / 字段类型 → SchemaInspector 实时 PRAGMA 查询
-    - 枚举值 → SchemaInspector SELECT DISTINCT 采样
-    - few-shot SQL 案例 → Memory episodic 层（动态积累）
+    加载优先级：
+    1. 硬编码的核心业务规则（对账规则/方言/术语）——始终存在
+    2. 磁盘上的 knowledge_base/table_docs/*.md 文件——自动读取切块
 
-    保留的内容：
-    - 业务阈值与对账判断标准（数据库查不到的业务规则）
-    - 跨表关联语义（孤儿退款、漏支付等异常定义）
-    - SQLite 方言提示（LLM 容易混淆的方言差异）
-    - 净收入/业务术语映射
+    kb_dir: 知识库文档目录，默认从 KB_DIR 环境变量或 knowledge_base/table_docs 读取
     """
+    import os
+    if not kb_dir:
+        kb_dir = os.getenv("KB_DIR", "knowledge_base/table_docs")
+
     chunks: List[DocChunk] = []
 
     # ── 对账业务规则（阈值 + 异常定义）──
@@ -130,5 +132,25 @@ def build_default_kb() -> List[DocChunk]:
             "对账差异金额 = ABS(o.amount - p.amount) WHERE 差值 > 0.01。",
         )
     )
+
+    # ── 磁盘知识库文档自动加载 ──
+    if os.path.isdir(kb_dir):
+        md_files = sorted(
+            f for f in os.listdir(kb_dir)
+            if f.endswith(".md") and not f.startswith(".")
+        )
+        if md_files:
+            logger.info("chunker: loading %d docs from %s", len(md_files), kb_dir)
+        for fname in md_files:
+            fpath = os.path.join(kb_dir, fname)
+            try:
+                text = open(fpath, encoding="utf-8").read()
+                doc_id = f"doc:{fname.replace('.md', '')}"
+                file_chunks = chunk_text_doc(doc_id, text, max_chars=800)
+                chunks.extend(file_chunks)
+            except Exception as e:
+                logger.warning("chunker: failed to load %s: %s", fpath, e)
+    else:
+        logger.debug("chunker: kb_dir %s not found, skip disk docs", kb_dir)
 
     return chunks

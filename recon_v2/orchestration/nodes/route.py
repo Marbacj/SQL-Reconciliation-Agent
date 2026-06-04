@@ -83,13 +83,19 @@ def route_node(state: GraphState) -> dict:
 
     with span("route", attributes={"trace_id": ctx.trace_id}) as s:
         intent, conf = _rule_match(query)
+        logger.debug("[ROUTE] query='%s' rule_match → intent=%s conf=%.2f", query, intent, conf)
 
         # 关键词没命中 → 走 LLM 兜底
         if conf < 0.5:
             intent, conf = _llm_classify(ctx, query)
+            logger.debug("[ROUTE] LLM fallback → intent=%s conf=%.2f", intent, conf)
+
+        logger.info("[ROUTE] final → intent=%s conf=%.2f → %s", intent, conf, "clarify" if (intent == "boundary_edge" or conf < 0.6) else "plan")
 
         ctx.intent = intent
         ctx.confidence = conf
+
+        logger.debug("[ROUTE] ctx.intent=%s ctx.confidence=%.2f", ctx.intent, ctx.confidence)
 
         try:
             s.set_attributes({"intent": intent, "confidence": conf})
