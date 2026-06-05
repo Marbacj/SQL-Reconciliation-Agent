@@ -1,0 +1,135 @@
+<svg xmlns="http://www.w3.org/2000/svg"
+     width="900" height="640"
+     viewBox="0 0 900 640"
+     font-family="Microsoft YaHei, PingFang SC, sans-serif">
+  <defs>
+    <marker id="arrow" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#555"/>
+    </marker>
+    <filter id="s"><feDropShadow dx="1" dy="2" stdDeviation="3" flood-opacity="0.13"/></filter>
+    <filter id="s2"><feDropShadow dx="0" dy="1" stdDeviation="2" flood-opacity="0.09"/></filter>
+    <linearGradient id="gTitle" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#1A3060"/>
+      <stop offset="100%" style="stop-color:#3A60A0"/>
+    </linearGradient>
+    <linearGradient id="gQ1" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#FFF8E1;stop-opacity:0.9"/>
+      <stop offset="100%" style="stop-color:#FFE082;stop-opacity:0.5"/>
+    </linearGradient>
+    <linearGradient id="gQ2" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#E8F2FF;stop-opacity:0.9"/>
+      <stop offset="100%" style="stop-color:#B3D4FC;stop-opacity:0.5"/>
+    </linearGradient>
+    <linearGradient id="gQ3" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#FFEBEE;stop-opacity:0.9"/>
+      <stop offset="100%" style="stop-color:#FFB3B3;stop-opacity:0.5"/>
+    </linearGradient>
+    <linearGradient id="gQ4" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#F3E5F5;stop-opacity:0.9"/>
+      <stop offset="100%" style="stop-color:#CE93D8;stop-opacity:0.5"/>
+    </linearGradient>
+  </defs>
+
+  <!-- ===== 背景 ===== -->
+  <rect width="900" height="640" fill="#FAFBFD"/>
+
+  <!-- ===== 主标题 ===== -->
+  <rect x="0" y="0" width="900" height="60" fill="url(#gTitle)"/>
+  <text x="450" y="32" text-anchor="middle" fill="white" font-size="19" font-weight="bold">
+    Agent 价值象限：技术壁垒 × 商业价值
+  </text>
+  <text x="450" y="50" text-anchor="middle" fill="#BBD4F0" font-size="11">
+    一个人能做、且值得做的方向，只在右上角
+  </text>
+
+  <!-- ===== 象限区域 ===== -->
+  <!-- 坐标原点 (130, 540), 右上 (810, 100) -->
+  <!-- 四个象限填充 -->
+  <!-- Q2 左上：蓝海但难 -->
+  <rect x="130" y="100" width="340" height="220" fill="url(#gQ2)" stroke="#5B8DD9" stroke-width="1" stroke-dasharray="4 3"/>
+  <!-- Q1 右上：金矿区 -->
+  <rect x="470" y="100" width="340" height="220" fill="url(#gQ1)" stroke="#E08020" stroke-width="2"/>
+  <!-- Q3 左下：红海陪练 -->
+  <rect x="130" y="320" width="340" height="220" fill="url(#gQ3)" stroke="#C03030" stroke-width="1" stroke-dasharray="4 3"/>
+  <!-- Q4 右下：demo 友好 -->
+  <rect x="470" y="320" width="340" height="220" fill="url(#gQ4)" stroke="#9B6DC8" stroke-width="1" stroke-dasharray="4 3"/>
+
+  <!-- 象限标签 -->
+  <text x="148" y="122" fill="#2B5090" font-size="12" font-weight="bold">蓝海但难</text>
+  <text x="148" y="138" fill="#5A7AAA" font-size="10">技术高 · 价值待验证</text>
+
+  <text x="488" y="122" fill="#7A4000" font-size="13" font-weight="bold">★ 金矿区</text>
+  <text x="488" y="138" fill="#AA6020" font-size="10">高壁垒 + 高价值，值得 all-in</text>
+
+  <text x="148" y="342" fill="#B03030" font-size="12" font-weight="bold">红海陪练</text>
+  <text x="148" y="358" fill="#C06060" font-size="10">技术低 · 巨头碾压</text>
+
+  <text x="488" y="342" fill="#4A2070" font-size="12" font-weight="bold">demo 友好</text>
+  <text x="488" y="358" fill="#7A4AAA" font-size="10">壁垒低 · 容易讲故事，但不挣钱</text>
+
+  <!-- ===== 坐标轴 ===== -->
+  <line x1="130" y1="540" x2="820" y2="540" stroke="#333" stroke-width="2" marker-end="url(#arrow)"/>
+  <line x1="130" y1="540" x2="130" y2="90" stroke="#333" stroke-width="2" marker-end="url(#arrow)"/>
+
+  <!-- 中线 -->
+  <line x1="470" y1="100" x2="470" y2="540" stroke="#999" stroke-width="1" stroke-dasharray="3 3"/>
+  <line x1="130" y1="320" x2="810" y2="320" stroke="#999" stroke-width="1" stroke-dasharray="3 3"/>
+
+  <!-- 坐标轴标签 -->
+  <text x="825" y="544" fill="#333" font-size="11" font-weight="bold">技术壁垒 →</text>
+  <text x="115" y="85" text-anchor="end" fill="#333" font-size="11" font-weight="bold" transform="rotate(-90 115 85)">↑ 商业价值</text>
+  <text x="125" y="555" text-anchor="end" fill="#666" font-size="9">低</text>
+  <text x="822" y="555" fill="#666" font-size="9">高</text>
+  <text x="125" y="100" text-anchor="end" fill="#666" font-size="9">高</text>
+  <text x="125" y="544" text-anchor="end" fill="#666" font-size="9">低</text>
+
+  <!-- ===== 数据点 ===== -->
+  <!-- DataAgent  右上 高高 -->
+  <g filter="url(#s)">
+    <circle cx="700" cy="160" r="38" fill="#E08020" stroke="#7A4000" stroke-width="2"/>
+    <text x="700" y="155" text-anchor="middle" fill="white" font-size="13" font-weight="bold">Data</text>
+    <text x="700" y="172" text-anchor="middle" fill="white" font-size="13" font-weight="bold">Agent</text>
+  </g>
+  <text x="700" y="215" text-anchor="middle" fill="#7A4000" font-size="10" font-weight="bold">我赌的方向</text>
+
+  <!-- Coding Agent 右上更靠右 -->
+  <g filter="url(#s)">
+    <circle cx="780" cy="135" r="32" fill="#3A9A3A" stroke="#1A5A1A" stroke-width="2"/>
+    <text x="780" y="130" text-anchor="middle" fill="white" font-size="11" font-weight="bold">Coding</text>
+    <text x="780" y="145" text-anchor="middle" fill="white" font-size="11" font-weight="bold">Agent</text>
+  </g>
+
+  <!-- OnCall 助手 左下偏中 -->
+  <g filter="url(#s2)">
+    <circle cx="295" cy="395" r="26" fill="#C03030" stroke="#7A0000" stroke-width="1.5"/>
+    <text x="295" y="392" text-anchor="middle" fill="white" font-size="10" font-weight="bold">OnCall</text>
+    <text x="295" y="405" text-anchor="middle" fill="white" font-size="10" font-weight="bold">助手</text>
+  </g>
+
+  <!-- 智能客服 左下 -->
+  <g filter="url(#s2)">
+    <circle cx="200" cy="450" r="26" fill="#C03030" stroke="#7A0000" stroke-width="1.5"/>
+    <text x="200" y="447" text-anchor="middle" fill="white" font-size="10" font-weight="bold">智能</text>
+    <text x="200" y="460" text-anchor="middle" fill="white" font-size="10" font-weight="bold">客服</text>
+  </g>
+
+  <!-- 会议纪要 -->
+  <g filter="url(#s2)">
+    <circle cx="220" cy="490" r="22" fill="#9B6DC8" stroke="#4A2070" stroke-width="1.5"/>
+    <text x="220" y="488" text-anchor="middle" fill="white" font-size="9" font-weight="bold">会议</text>
+    <text x="220" y="500" text-anchor="middle" fill="white" font-size="9" font-weight="bold">纪要</text>
+  </g>
+
+  <!-- RAG 问答 -->
+  <g filter="url(#s2)">
+    <circle cx="370" cy="430" r="22" fill="#9B6DC8" stroke="#4A2070" stroke-width="1.5"/>
+    <text x="370" y="428" text-anchor="middle" fill="white" font-size="9" font-weight="bold">RAG</text>
+    <text x="370" y="440" text-anchor="middle" fill="white" font-size="9" font-weight="bold">问答</text>
+  </g>
+
+  <!-- ===== 底部说明 ===== -->
+  <rect x="130" y="568" width="680" height="52" fill="#2D3E56" rx="6"/>
+  <text x="150" y="588" fill="white" font-size="11" font-weight="bold">核心判断</text>
+  <text x="150" y="606" fill="#AACCFF" font-size="10">DataAgent 与 Coding Agent 的共性：不只是问答 wrapper，而是「生成可执行产物 + 决策能力」</text>
+  <text x="150" y="620" fill="#AACCFF" font-size="10">所以它们同时具备 —— 高技术壁垒（难做对）+ 高商业价值（有人付钱）</text>
+</svg>

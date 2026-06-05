@@ -109,12 +109,28 @@ def plan_node(state: GraphState) -> dict:
                     except Exception:
                         pass
 
+                # Episodic few-shot：召回历史成功案例，帮助 LLM 生成更精准的 plan
+                episodic_hint = ""
+                try:
+                    if ctx.memory is not None and hasattr(ctx.memory, "query_episodic"):
+                        past_cases = ctx.memory.query_episodic(query, k=3, intent_filter=intent)
+                        if past_cases:
+                            episodic_hint = "\nHistorical successful cases (for reference):\n"
+                            for c in past_cases:
+                                past_q = c.get("query", "")
+                                past_sql = c.get("sql", "")
+                                if past_q and past_sql:
+                                    episodic_hint += f"  Q: {past_q}\n  SQL: {past_sql[:300]}\n"
+                except Exception as e:
+                    logger.debug("[PLAN] episodic recall failed: %s", e)
+
                 msg = (
                     f"Query: {query}\nIntent: {intent}\n"
                     f"{schema_hint}\n"
                     "SQLite date rules: DATE('now'), DATE('now','-N days'), "
                     "strftime('%Y-%m',col). NO INTERVAL/CURDATE/NOW()."
-                    f"{rag_hint}\n"
+                    f"{rag_hint}"
+                    f"{episodic_hint}\n"
                     "Output 2-5 concise step descriptions to solve this SQL reconciliation task. "
                     "Each step on a new line, no numbering needed."
                 )
@@ -132,6 +148,27 @@ def plan_node(state: GraphState) -> dict:
                     steps = lines
                     logger.debug("[PLAN] LLM refined steps=%s", lines)
 
+                # 对账意图：优先用 ReconPlanner 生成结构化 tables 数组
+                if use_parallel and intent in {"time_window_recon", "numeric_diff", "multi_table_join"}:
+                    recon_plan = _build_recon_plan_with_llm(
+                        intent=intent,
+                        query=query,
+                        schema_hint=schema_hint,
+                        ctx=ctx,
+                    )
+                    if recon_plan and recon_plan.get("tables"):
+                        parallel_tasks = _recon_plan_to_parallel_steps(recon_plan)
+                        if len(parallel_tasks) >= 2:
+                            steps = [{"parallel": parallel_tasks, "_recon_plan": recon_plan}]
+                            logger.info(
+                                "[PLAN] ReconPlanner → %d-table plan: %s",
+                                len(parallel_tasks),
+                                [t["alias"] for t in parallel_tasks],
+                            )
+                            ctx.step()
+                            return {"plan_steps": steps, "mode": ctx.mode, "step_counter": ctx.step_counter}
+
+                # 旧并行路径（fallback）
                 # 并行路径：让 LLM 为 parallel 步骤填充具体 SQL
                 if use_parallel:
                     parallel_steps = _build_parallel_steps_with_llm(
@@ -151,6 +188,349 @@ def plan_node(state: GraphState) -> dict:
             "mode": ctx.mode,
             "step_counter": ctx.step_counter,
         }
+
+
+def _build_recon_plan_with_llm(
+    intent: str,
+    query: str,
+    schema_hint: str,
+    ctx,
+) -> dict | None:
+    """ReconPlanner：让 LLM 输出结构化对账计划（tables 数组），支持 N 张表。
+
+    返回格式：
+    {
+        "tables": [
+            {"alias": "orders",   "table": "order_amount",  "key_cols": ["order_no"], "value_cols": ["total_amount"]},
+            {"alias": "payments", "table": "settlements",   "key_cols": ["order_no"], "value_cols": ["settle_amount"]},
+            ...  # 可以是 2 张也可以是 N 张
+        ],
+        "join_keys": ["order_no"],
+        "recon_type": "amount_diff",  # amount_diff | existence | time_window
+        "tolerance": 0.01
+    }
+    失败返回 None（触发 fallback 到旧并行模板）。
+    """
+    import json as _json
+
+    prompt = (
+        f"Query: {query}\nIntent: {intent}\n\n"
+        f"{schema_hint}\n\n"
+        "你是一个数据对账规划器。根据查询意图，从上述表结构中找出语义最匹配的表参与对账。\n"
+        "选表原则：\n"
+        "  - 「订单金额/支付金额对比」→ 选订单表(order_amount/orders) 和结算/支付流水表(settlements/payments)\n"
+        "  - 不要选统计汇总表(gmv/stats/report/summary/count)，除非查询明确提到这些表名\n"
+        "  - 每张候选表必须有金额列（amount/fee/price/gmv 等）或业务 ID 列\n\n"
+        "返回 JSON（只返回 JSON，不要其他文字）:\n"
+        '{\n'
+        '  "tables": [\n'
+        '    {"alias": "<表别名>", "table": "<实际表名>", "key_cols": ["<join列>"], "value_cols": ["<比较金额列>"]},\n'
+        '    ...\n'
+        '  ],\n'
+        '  "join_keys": ["<主键列名>"],\n'
+        '  "recon_type": "amount_diff",\n'
+        '  "tolerance": 0.01\n'
+        '}\n\n'
+        "recon_type 取值: amount_diff(金额对比), existence(存在性检查), time_window(时间窗口对账)\n"
+        "如果只需要单表聚合查询（不涉及多表对账），返回空 tables 数组: {\"tables\":[]}"
+    )
+
+    try:
+        out = ctx.llm.chat(
+            messages=[
+                {
+                    "role": "system",
+                    "content": (
+                        "You are a data reconciliation planner. Analyze the query and output a structured "
+                        "reconciliation plan with N tables (N>=2 for recon queries). "
+                        "Return valid JSON only."
+                    ),
+                },
+                {"role": "user", "content": prompt},
+            ],
+            trace_id=ctx.trace_id,
+            temperature=0.0,
+            max_tokens=500,
+        )
+        raw = out.content.strip()
+        start = raw.find("{")
+        end = raw.rfind("}") + 1
+        if start < 0 or end <= start:
+            logger.warning("recon_plan: LLM returned non-JSON: %s", raw[:200])
+            return None
+
+        plan = _json.loads(raw[start:end])
+        tables = plan.get("tables", [])
+
+        if not tables:
+            logger.info("recon_plan: LLM decided single-table query, skip recon path")
+            return None
+
+        # 验证每个 table 条目
+        valid_tables = []
+        for t in tables:
+            if t.get("table") and t.get("key_cols") and t.get("value_cols"):
+                valid_tables.append({
+                    "alias": t.get("alias") or t["table"],
+                    "table": t["table"],
+                    "key_cols": t["key_cols"] if isinstance(t["key_cols"], list) else [t["key_cols"]],
+                    "value_cols": t["value_cols"] if isinstance(t["value_cols"], list) else [t["value_cols"]],
+                })
+
+        if len(valid_tables) < 2:
+            logger.info("recon_plan: only %d valid tables, skip recon path", len(valid_tables))
+            return None
+
+        plan["tables"] = valid_tables
+        plan.setdefault("join_keys", valid_tables[0]["key_cols"])
+        plan.setdefault("recon_type", "amount_diff")
+        plan.setdefault("tolerance", 0.01)
+
+        logger.info(
+            "recon_plan: LLM planned %d-table recon (%s): %s",
+            len(valid_tables),
+            plan["recon_type"],
+            [t["alias"] for t in valid_tables],
+        )
+
+        # ── 用数据库验证并修正 join key（不依赖 LLM 猜测）
+        if ctx.db_path:
+            plan = _validate_recon_plan_with_db(plan, ctx.db_path)
+            if not plan.get("_plan_valid", True):
+                logger.warning(
+                    "recon_plan: validation failed, returning plan with warnings"
+                )
+                # 仍然返回 plan（带警告），让 diff engine 展示问题而不是静默失败
+
+        return plan
+
+    except Exception as e:
+        logger.warning("recon_plan: LLM failed: %s", e)
+        return None
+
+
+def _auto_discover_join_keys(tables_meta: list, db_path: str) -> dict:
+    """纯代码自动发现各表之间可用的 join key。
+
+    算法：
+    1. 找所有表的公共列名
+    2. 对每个公共列执行 JOIN COUNT 验证匹配率
+    3. 找不到完全公共列时，做相似列名匹配（order_no ~ order_id，编辑距离 <= 2）
+    4. 返回 {(alias_a, alias_b): {"col_a": "order_no", "col_b": "order_no", "match_count": 123}}
+
+    JOIN COUNT = 0 → 不可关联（表选择可能有误）
+    JOIN COUNT > 0 → 有效 join key
+    """
+    import sqlite3
+    import difflib
+
+    if len(tables_meta) < 2:
+        return {}
+
+    result: dict = {}  # (alias_a, alias_b) → join key 信息
+
+    try:
+        conn = sqlite3.connect(db_path, timeout=5.0)
+    except Exception as e:
+        logger.warning("auto_discover_join_keys: connect failed: %s", e)
+        return {}
+
+    try:
+        # 获取每张表的真实列名
+        table_cols: dict = {}  # alias → set(col_names)
+        for t in tables_meta:
+            alias = t["alias"]
+            table_name = t["table"]
+            try:
+                cur = conn.execute(f"PRAGMA table_info(\"{table_name}\")")
+                cols = {row[1] for row in cur.fetchall()}
+                table_cols[alias] = cols
+            except Exception as e:
+                logger.warning("auto_discover: PRAGMA failed for %s: %s", table_name, e)
+                table_cols[alias] = set()
+
+        # 两两验证
+        for i in range(len(tables_meta)):
+            for j in range(i + 1, len(tables_meta)):
+                ta = tables_meta[i]
+                tb = tables_meta[j]
+                alias_a, alias_b = ta["alias"], tb["alias"]
+                cols_a = table_cols.get(alias_a, set())
+                cols_b = table_cols.get(alias_b, set())
+
+                if not cols_a or not cols_b:
+                    continue
+
+                # ── Step 1：完全公共列名
+                common = cols_a & cols_b
+                # 优先含有明确业务 key 语义的列：_no, code, sn > _id > id
+                def _key_priority(col: str) -> int:
+                    c = col.lower()
+                    if any(kw in c for kw in ("_no", "code", "sn", "num")):
+                        return 0
+                    if "_id" in c and c != "id":
+                        return 1
+                    if c == "id":
+                        return 3  # 低优先级：纯 id 太泛
+                    return 2
+                # 排除纯 id（高基数但语义弱）和非 key 列
+                preferred = sorted(
+                    [c for c in common if any(
+                        kw in c.lower() for kw in ("_no", "_id", "code", "key", "num", "sn")
+                    )],
+                    key=_key_priority,
+                )
+                candidates = preferred or [c for c in common if c.lower() != "id"]
+
+                # ── Step 2：无公共列时做相似名匹配（order_no ~ order_id）
+                if not candidates:
+                    for ca in cols_a:
+                        for cb in cols_b:
+                            ratio = difflib.SequenceMatcher(None, ca.lower(), cb.lower()).ratio()
+                            if ratio >= 0.7 and ca != cb:
+                                candidates.append((ca, cb))  # (col_a, col_b) tuple
+                    if not candidates:
+                        logger.info(
+                            "auto_discover: no candidate keys between %s and %s",
+                            alias_a, alias_b,
+                        )
+                        result[(alias_a, alias_b)] = {
+                            "col_a": None, "col_b": None,
+                            "match_count": 0,
+                            "error": f"{alias_a} 和 {alias_b} 没有可关联的公共列",
+                        }
+                        continue
+
+                # ── Step 3：JOIN COUNT 验证，选匹配数最大的
+                best = None
+                best_count = -1
+                for cand in candidates:
+                    if isinstance(cand, tuple):
+                        col_a, col_b = cand
+                    else:
+                        col_a = col_b = cand
+                    try:
+                        sql = (
+                            f'SELECT COUNT(*) FROM "{ta["table"]}" t1 '
+                            f'JOIN "{tb["table"]}" t2 ON t1."{col_a}" = t2."{col_b}"'
+                        )
+                        cur = conn.execute(sql)
+                        count = cur.fetchone()[0]
+                        if count > best_count:
+                            best_count = count
+                            best = {"col_a": col_a, "col_b": col_b, "match_count": count}
+                    except Exception as e:
+                        logger.debug("join count failed %s.%s-%s.%s: %s", alias_a, col_a, alias_b, col_b, e)
+
+                if best is None:
+                    best = {"col_a": None, "col_b": None, "match_count": 0,
+                            "error": "JOIN COUNT 验证失败"}
+
+                result[(alias_a, alias_b)] = best
+                logger.info(
+                    "auto_discover: %s.%s JOIN %s.%s → match_count=%d",
+                    alias_a, best["col_a"], alias_b, best["col_b"], best["match_count"],
+                )
+    finally:
+        conn.close()
+
+    return result
+
+
+def _validate_recon_plan_with_db(recon_plan: dict, db_path: str) -> dict:
+    """用数据库验证 LLM 规划的 recon_plan，修正 join key 并附加可信度标注。
+
+    返回修正后的 recon_plan，新增字段：
+    - "_join_validation": {(alias_a, alias_b): {col_a, col_b, match_count, valid}}
+    - "_plan_valid": True/False（是否所有表对都能关联）
+    - "_warning": 警告信息（选表可能有误时填充）
+
+    逻辑：
+    1. 用 _auto_discover_join_keys 发现实际可用的 join key
+    2. 对比 LLM 规划的 key_cols 是否与发现结果一致
+    3. 若 LLM 的 key 无效（match_count=0）但发现了更好的 key → 自动修正
+    4. 若所有候选 key 都 match_count=0 → 标记 _plan_valid=False + 附加警告
+    """
+    tables = recon_plan.get("tables", [])
+    if len(tables) < 2:
+        return recon_plan
+
+    join_validation = _auto_discover_join_keys(tables, db_path)
+    recon_plan["_join_validation"] = {
+        f"{k[0]}-{k[1]}": v for k, v in join_validation.items()
+    }
+
+    all_valid = True
+    warnings = []
+
+    # 更新每张表的 key_cols（基于发现结果）
+    # 构建 alias → validated_key_col 映射
+    alias_key_map: dict = {}  # alias → 最终 join key 列名（本表侧）
+    for (alias_a, alias_b), vinfo in join_validation.items():
+        if vinfo["match_count"] == 0:
+            all_valid = False
+            err = vinfo.get("error", "")
+            warnings.append(
+                f"⚠️ {alias_a} 和 {alias_b} 之间没有匹配数据（match_count=0），"
+                f"可能选错了表。{err}"
+            )
+        else:
+            # 记录每个 alias 使用的 key 列名
+            alias_key_map[alias_a] = vinfo["col_a"]
+            alias_key_map[alias_b] = vinfo["col_b"]
+
+    # 用验证结果覆盖 LLM 的 key_cols（只在 key 有效时覆盖）
+    for t in tables:
+        alias = t["alias"]
+        if alias in alias_key_map and alias_key_map[alias]:
+            llm_key = t["key_cols"][0] if t["key_cols"] else None
+            discovered_key = alias_key_map[alias]
+            if llm_key != discovered_key:
+                logger.info(
+                    "validate_recon_plan: correcting %s key_cols: %s → %s",
+                    alias, llm_key, discovered_key,
+                )
+                t["key_cols"] = [discovered_key]
+
+    # 更新全局 join_keys（取第一对的公共 key 或 col_a）
+    first_pair = next(iter(join_validation.values()), None)
+    if first_pair and first_pair["match_count"] > 0:
+        col_a = first_pair["col_a"]
+        col_b = first_pair["col_b"]
+        # 如果 col_a == col_b（同名列），join_keys 用统一名称
+        recon_plan["join_keys"] = [col_a] if col_a == col_b else [col_a]
+
+    recon_plan["_plan_valid"] = all_valid
+    if warnings:
+        recon_plan["_warning"] = "\n".join(warnings)
+        logger.warning("validate_recon_plan warnings: %s", recon_plan["_warning"])
+
+    return recon_plan
+
+
+def _recon_plan_to_parallel_steps(recon_plan: dict) -> list:
+    """将 ReconPlanner 输出的 tables 数组转换为 parallel_act 可执行的子任务列表。"""
+    tables = recon_plan.get("tables", [])
+    join_keys = recon_plan.get("join_keys", [])
+    tasks = []
+    for t in tables:
+        # 生成每张表的 SELECT SQL（查 key_cols + value_cols）
+        cols = list(dict.fromkeys(t["key_cols"] + t["value_cols"]))  # 去重保序
+        col_list = ", ".join(f'"{c}"' for c in cols)
+        sql = f'SELECT {col_list} FROM "{t["table"]}"'
+        tasks.append({
+            "action": "sql_runner",
+            "alias": t["alias"],
+            "sql": sql,
+            "description": f"查询 {t['table']} 的 {', '.join(t['value_cols'])}",
+            # 携带 meta 给 diff engine 使用
+            "_recon_meta": {
+                "key_cols": t["key_cols"],
+                "value_cols": t["value_cols"],
+                "table": t["table"],
+            },
+        })
+    return tasks
 
 
 def _build_parallel_steps_with_llm(

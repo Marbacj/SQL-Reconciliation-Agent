@@ -34,6 +34,16 @@ from recon_v2.orchestration.graph import build_graph
 from recon_v2.rag.retriever import get_default_retriever
 from recon_v2.rag.schema_indexer import rebuild_index
 from recon_v2.tools import build_default_registry
+from apps.api.auth import (
+    TenantInfo,
+    create_token,
+    create_user,
+    get_current_tenant,
+    get_tenant_model_config,
+    get_user_by_username,
+    upsert_tenant_model_config,
+    verify_password,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -59,15 +69,18 @@ def _ensure_sessions_db():
             updated  INTEGER NOT NULL
         )
     """)
-    # 兼容旧表：按需添加 messages / title / updated 列
+    # 兼容旧表：按需添加 messages / title / updated / tenant_id 列
     cols = {r[1] for r in conn.execute("PRAGMA table_info(sessions)")}
     for col, ddl in [
-        ("messages", "TEXT NOT NULL DEFAULT '[]'"),
-        ("title",    "TEXT NOT NULL DEFAULT ''"),
-        ("updated",  "INTEGER NOT NULL DEFAULT 0"),
+        ("messages",  "TEXT NOT NULL DEFAULT '[]'"),
+        ("title",     "TEXT NOT NULL DEFAULT ''"),
+        ("updated",   "INTEGER NOT NULL DEFAULT 0"),
+        ("tenant_id", "TEXT NOT NULL DEFAULT 'default'"),
     ]:
         if col not in cols:
             conn.execute(f"ALTER TABLE sessions ADD COLUMN {col} {ddl}")
+    # 租户索引
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_sessions_tenant ON sessions(tenant_id)")
     conn.commit()
     conn.close()
 
@@ -93,6 +106,25 @@ class QueryRequest(BaseModel):
     thread_id: Optional[str] = None
 
 
+class LoginRequest(BaseModel):
+    username: str
+    password: str
+
+
+class RegisterRequest(BaseModel):
+    username: str
+    password: str
+    role: str = "user"
+
+
+class ModelConfigRequest(BaseModel):
+    provider: str = ""
+    model: str = ""
+    api_key: str = ""
+    base_url: str = ""
+    temperature: float = 0.0
+
+
 class FeedbackRequest(BaseModel):
     trace_id: str
     query: str
@@ -115,6 +147,8 @@ class SessionRecord(BaseModel):
 def _build_app():
     if not _HAS_FASTAPI:
         return None
+
+    from fastapi import Depends  # noqa: F811 — 在函数内显式引入，确保闭包可见
 
     app = FastAPI(
         title="SQL Reconciliation Agent v2",
@@ -155,6 +189,10 @@ def _build_app():
         def _landing():
             return FileResponse(os.path.join(_ui_dir, "landing.html"))
 
+        @app.get("/favicon.svg", include_in_schema=False)
+        def _favicon():
+            return FileResponse(os.path.join(_ui_dir, "favicon.svg"), media_type="image/svg+xml")
+
         # 静态资源（CSS/JS/图片等）挂载到 /static
         app.mount("/static", StaticFiles(directory=_ui_dir), name="static")
 
@@ -176,6 +214,57 @@ def _build_app():
 
     threading.Thread(target=_init_schema_index, daemon=True).start()
 
+    # ── FastAPI Depends 工厂 ────────────────────────────────────────────────
+    _get_tenant = get_current_tenant()
+
+    # ── 认证接口 ─────────────────────────────────────────────────────────────
+
+    @app.post("/auth/login", tags=["auth"])
+    def auth_login(req: LoginRequest):
+        """用户登录，返回 JWT Token。"""
+        user = get_user_by_username(req.username)
+        if not user or not verify_password(req.password, user["password_hash"]):
+            raise HTTPException(status_code=401, detail="用户名或密码错误")
+        token = create_token(user["tenant_id"], user["role"])
+        return {
+            "token": token,
+            "tenant_id": user["tenant_id"],
+            "username": user["username"],
+            "role": user["role"],
+        }
+
+    @app.post("/auth/register", tags=["auth"])
+    def auth_register(req: RegisterRequest, tenant: TenantInfo = Depends(_get_tenant)):
+        """注册新用户（需要 admin 权限）。"""
+        if tenant.role != "admin":
+            raise HTTPException(status_code=403, detail="仅管理员可注册新用户")
+        if get_user_by_username(req.username):
+            raise HTTPException(status_code=400, detail="用户名已存在")
+        user = create_user(req.username, req.password, req.role)
+        return {"status": "ok", "tenant_id": user["tenant_id"]}
+
+    # ── 租户模型配置接口 ──────────────────────────────────────────────────────
+
+    @app.get("/tenants/me/model", tags=["tenant"])
+    def get_my_model_config(tenant: TenantInfo = Depends(_get_tenant)):
+        """获取当前租户的 LLM 配置。"""
+        cfg = get_tenant_model_config(tenant.tenant_id)
+        return {
+            "tenant_id": cfg.tenant_id,
+            "provider": cfg.provider,
+            "model": cfg.model,
+            "api_key": "••••••" if cfg.api_key else "",   # key 脱敏
+            "base_url": cfg.base_url,
+            "temperature": cfg.temperature,
+        }
+
+    @app.put("/tenants/me/model", tags=["tenant"])
+    def update_my_model_config(req: ModelConfigRequest, tenant: TenantInfo = Depends(_get_tenant)):
+        """更新当前租户的 LLM 配置。"""
+        upsert_tenant_model_config(tenant.tenant_id, req.model_dump())
+        return {"status": "ok", "tenant_id": tenant.tenant_id}
+
+
     @app.get("/health")
     def health():
         from recon_v2.rag.schema_indexer import get_default_linker as _get_linker
@@ -194,17 +283,26 @@ def _build_app():
         }
 
     @app.post("/query")
-    def query(req: QueryRequest):
+    def query(req: QueryRequest, tenant: TenantInfo = Depends(_get_tenant)):
         target_db = req.db_path or db_path
         ctx = AgentContext(query=req.query, db_path=target_db)
         ctx.tools = build_default_registry(target_db)
         ctx.memory = memory
         ctx.rag = retriever
-        # ── 初始化 LLM Gateway（支持环境变量配置）──
+        # ── 注入租户 LLM 配置（优先租户自定义，fallback 到 env）──
         try:
             from recon_v2.infra.llm_gateway import LLMGateway
-            ctx.llm = LLMGateway()
-            logger.debug("LLM Gateway initialized for trace_id=%s: %s/%s", ctx.trace_id, ctx.llm.provider, ctx.llm.model)
+            tenant_cfg = get_tenant_model_config(tenant.tenant_id)
+            ctx.llm = LLMGateway(
+                provider=tenant_cfg.provider or None,
+                model=tenant_cfg.model or None,
+                api_key=tenant_cfg.api_key or None,
+                base_url=tenant_cfg.base_url or None,
+            )
+            logger.debug(
+                "LLM Gateway initialized for trace_id=%s tenant=%s: %s/%s",
+                ctx.trace_id, tenant.tenant_id, ctx.llm.provider, ctx.llm.model
+            )
         except Exception as e:
             logger.warning("LLM Gateway init failed (will use template fallback): %s", e)
         ctx_registry.register(ctx)
@@ -231,6 +329,7 @@ def _build_app():
             )
         finally:
             ctx_registry.remove(ctx.trace_id)
+
 
     @app.post("/admin/reindex", tags=["admin"])
     def reindex(target_db: Optional[str] = None):
@@ -318,22 +417,22 @@ def _build_app():
     import json as _json
 
     @app.get("/sessions", tags=["sessions"])
-    def list_sessions(limit: int = 100):
-        """返回最近 limit 条会话摘要（不含完整 messages），按 updated 倒序。"""
+    def list_sessions(limit: int = 100, tenant: TenantInfo = Depends(_get_tenant)):
+        """返回当前租户最近 limit 条会话摘要（不含完整 messages），按 updated 倒序。"""
         with _sessions_conn() as conn:
             rows = conn.execute(
-                "SELECT id, title, status, ts, updated FROM sessions ORDER BY updated DESC LIMIT ?",
-                (limit,),
+                "SELECT id, title, status, ts, updated FROM sessions WHERE tenant_id=? ORDER BY updated DESC LIMIT ?",
+                (tenant.tenant_id, limit),
             ).fetchall()
         return [dict(r) for r in rows]
 
     @app.get("/sessions/{session_id}", tags=["sessions"])
-    def get_session(session_id: str):
-        """返回单个会话完整内容（含 messages）。"""
+    def get_session(session_id: str, tenant: TenantInfo = Depends(_get_tenant)):
+        """返回当前租户单个会话完整内容（含 messages）。"""
         with _sessions_conn() as conn:
             row = conn.execute(
-                "SELECT id, title, messages, status, ts, updated FROM sessions WHERE id=?",
-                (session_id,),
+                "SELECT id, title, messages, status, ts, updated FROM sessions WHERE id=? AND tenant_id=?",
+                (session_id, tenant.tenant_id),
             ).fetchone()
         if row is None:
             raise HTTPException(status_code=404, detail="session not found")
@@ -342,47 +441,109 @@ def _build_app():
         return d
 
     @app.post("/sessions", tags=["sessions"])
-    def create_session(rec: SessionRecord):
-        """新建会话。"""
+    def create_session(rec: SessionRecord, tenant: TenantInfo = Depends(_get_tenant)):
+        """新建会话（归属当前租户）。"""
         now = int(time.time() * 1000)
         with _sessions_conn() as conn:
             conn.execute(
-                "INSERT OR IGNORE INTO sessions (id, title, messages, status, ts, updated) VALUES (?,?,?,?,?,?)",
-                (rec.id, rec.title, _json.dumps(rec.messages), rec.status, rec.ts or now, now),
+                "INSERT OR IGNORE INTO sessions (id, title, messages, status, ts, updated, tenant_id) VALUES (?,?,?,?,?,?,?)",
+                (rec.id, rec.title, _json.dumps(rec.messages), rec.status, rec.ts or now, now, tenant.tenant_id),
             )
         return {"status": "ok", "id": rec.id}
 
     @app.put("/sessions/{session_id}/messages", tags=["sessions"])
-    def append_message(session_id: str, body: Dict[str, Any]):
-        """向会话追加一条消息，并更新 updated 时间。"""
+    def append_message(session_id: str, body: Dict[str, Any], tenant: TenantInfo = Depends(_get_tenant)):
+        """向当前租户的会话追加一条消息，并更新 updated 时间。"""
         now = int(time.time() * 1000)
         with _sessions_conn() as conn:
             row = conn.execute(
-                "SELECT messages FROM sessions WHERE id=?", (session_id,)
+                "SELECT messages FROM sessions WHERE id=? AND tenant_id=?", (session_id, tenant.tenant_id)
             ).fetchone()
             if row is None:
                 raise HTTPException(status_code=404, detail="session not found")
             msgs = _json.loads(row["messages"] or "[]")
             msgs.append(body)
             conn.execute(
-                "UPDATE sessions SET messages=?, updated=? WHERE id=?",
-                (_json.dumps(msgs), now, session_id),
+                "UPDATE sessions SET messages=?, updated=? WHERE id=? AND tenant_id=?",
+                (_json.dumps(msgs), now, session_id, tenant.tenant_id),
             )
         return {"status": "ok", "count": len(msgs)}
 
     @app.delete("/sessions/{session_id}", tags=["sessions"])
-    def delete_session(session_id: str):
-        """删除指定会话。"""
+    def delete_session(session_id: str, tenant: TenantInfo = Depends(_get_tenant)):
+        """删除当前租户的指定会话。"""
         with _sessions_conn() as conn:
-            conn.execute("DELETE FROM sessions WHERE id=?", (session_id,))
+            conn.execute("DELETE FROM sessions WHERE id=? AND tenant_id=?", (session_id, tenant.tenant_id))
         return {"status": "ok"}
 
     @app.delete("/sessions", tags=["sessions"])
-    def clear_sessions():
-        """清空所有会话。"""
+    def clear_sessions(tenant: TenantInfo = Depends(_get_tenant)):
+        """清空当前租户的所有会话。"""
         with _sessions_conn() as conn:
-            conn.execute("DELETE FROM sessions")
+            conn.execute("DELETE FROM sessions WHERE tenant_id=?", (tenant.tenant_id,))
         return {"status": "ok"}
+
+    # ── Evolution 状态与触发 ────────────────────────────────────────────────
+
+    @app.get("/evolution/status", tags=["evolution"])
+    def evolution_status(tenant: TenantInfo = Depends(_get_tenant)):
+        """返回当前 Memory / Skill 进化状态统计。"""
+        from recon_v2.memory.db import db_conn as _db_conn
+        try:
+            db = memory.db_path
+            with _db_conn(db) as conn:
+                ep_count = conn.execute(
+                    "SELECT COUNT(*) FROM episodic_case WHERE archived=0"
+                ).fetchone()[0]
+                ep_last = conn.execute(
+                    "SELECT MAX(created_at) FROM episodic_case WHERE archived=0"
+                ).fetchone()[0]
+                sk_count = conn.execute(
+                    "SELECT COUNT(*) FROM skill WHERE archived=0"
+                ).fetchone()[0]
+                sk_avg_conf = conn.execute(
+                    "SELECT AVG(confidence) FROM skill WHERE archived=0"
+                ).fetchone()[0]
+                rule_count = conn.execute(
+                    "SELECT COUNT(*) FROM semantic_rule WHERE archived=0"
+                ).fetchone()[0]
+            state = "running" if ep_count > 0 else "idle"
+            return {
+                "state": state,
+                "episodic_cases": ep_count,
+                "episodic_last_at": ep_last or "",
+                "skills": sk_count,
+                "skill_avg_confidence": round(float(sk_avg_conf or 0.0), 3),
+                "semantic_rules": rule_count,
+                "log": [
+                    f"episodic: {ep_count} cases",
+                    f"skills: {sk_count} (avg conf {sk_avg_conf:.2f})" if sk_count else "skills: 0",
+                    f"rules: {rule_count}",
+                ],
+            }
+        except Exception as e:
+            logger.error("evolution/status error: %s", e)
+            return {"state": "error", "error": str(e)}
+
+    @app.post("/evolution/run", tags=["evolution"])
+    def evolution_run(tenant: TenantInfo = Depends(_get_tenant)):
+        """手动触发一次 consolidation + decay 进化周期。"""
+        import threading
+
+        def _run():
+            try:
+                c_result = memory.consolidate()
+                d_result = memory.decay()
+                logger.info(
+                    "evolution/run finished: new_rules=%s archived=%s",
+                    c_result.get("new_rules", 0),
+                    d_result.get("archived", 0),
+                )
+            except Exception as e:
+                logger.error("evolution/run error: %s", e)
+
+        threading.Thread(target=_run, daemon=True).start()
+        return {"status": "ok", "message": "进化任务已触发（后台执行）"}
 
     @app.get("/trace/{trace_id}")
     def trace(trace_id: str):
