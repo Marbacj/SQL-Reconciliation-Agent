@@ -211,6 +211,41 @@ def _llm_pick_tool(ctx, query: str, intent: str, plan: List[str], state: Optiona
             except Exception:
                 pass
 
+        # ---- Memory 检索：注入历史相似 case（含用户标记错误的 case）----
+        memory_hint = ""
+        if ctx.memory is not None:
+            try:
+                mem_result = ctx.memory.query(query, k=3, intent_filter=intent)
+                episodic = mem_result.get("episodic", [])
+                semantic = mem_result.get("semantic", [])
+
+                failed_cases = [c for c in episodic if c.get("outcome", 1) == 0]
+                success_cases = [c for c in episodic if c.get("outcome", 1) == 1]
+
+                hints = []
+                if failed_cases:
+                    hints.append("⚠️ Previously FAILED SQLs for similar queries (DO NOT reuse these patterns):")
+                    for c in failed_cases[:2]:
+                        hints.append(f"  - Query: {c['query']!r}")
+                        hints.append(f"    Bad SQL: {c['sql']!r}")
+                        hints.append(f"    Answer was: {c['answer'][:100]!r}")
+                if success_cases:
+                    hints.append("✅ Previously SUCCESSFUL SQLs for similar queries (can use as reference):")
+                    for c in success_cases[:2]:
+                        hints.append(f"  - Query: {c['query']!r}")
+                        hints.append(f"    Good SQL: {c['sql']!r}")
+                if semantic:
+                    hints.append("📌 Semantic rules learned from history:")
+                    for r in semantic[:2]:
+                        hints.append(f"  - {r['rule']}")
+
+                if hints:
+                    memory_hint = "\n" + "\n".join(hints) + "\n"
+                    logger.debug("[ACT] memory_hint injected: %d failed, %d success, %d rules",
+                                 len(failed_cases), len(success_cases), len(semantic))
+            except Exception as e:
+                logger.debug("Memory query failed (non-fatal): %s", e)
+
         sys_msg = (
             "You are a SQL reconciliation agent. Generate ONE tool call to solve the query.\n"
             "Respond ONLY with JSON (no markdown, no explanation): "
@@ -218,6 +253,7 @@ def _llm_pick_tool(ctx, query: str, intent: str, plan: List[str], state: Optiona
             f"{schema_desc}\n"
             f"{_SQLITE_RULES}\n"
             f"{_SQL_PRINCIPLES}"
+            f"{memory_hint}"
             f"{rag_hint}"
             f"{correction_hint}"
         )

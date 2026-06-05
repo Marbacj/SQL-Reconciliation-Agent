@@ -136,9 +136,484 @@ def _check_range_guard(
 
 # ── 辅助函数 ────────────────────────────────────────────────────────
 
-def _summarize_observations(obs: list) -> str:
+def _nway_diff_engine(parallel_results: dict, recon_plan: dict) -> str:
+    """N-way Diff Engine：支持任意 N 张表的对账差异分析。
+
+    接收 parallel_results（每个 alias 对应子查询结果）和 recon_plan（tables 数组规划），
+    按 join_keys 对齐所有表，输出三类异常：
+      ① 金额差异：所有表都有记录但数值不等
+      ② 单边缺失：某表有记录但其他表没有
+
+    跨表 key 映射：
+      使用 recon_plan["_join_validation"] 中的 {alias_pair: {col_a, col_b, match_count}}
+      自动处理 order_no(A) ↔ order_id(B) 这类跨表列名不同的情况
+    """
+    tables = recon_plan.get("tables", [])
+    tolerance = float(recon_plan.get("tolerance", 0.01))
+    join_validation = recon_plan.get("_join_validation", {})  # "a-b" → {col_a, col_b, match_count}
+    plan_warning = recon_plan.get("_warning", "")
+
+    if not tables or len(tables) < 2:
+        return _diff_parallel_results(parallel_results, "")
+
+    # ── 若验证明确说明表不可关联，提前返回警告
+    if plan_warning and not recon_plan.get("_plan_valid", True):
+        return (
+            f"⚠️ 对账表关联验证失败，无法执行差异分析。\n\n"
+            f"{plan_warning}\n\n"
+            "建议：请明确指定需要对账的表名（如「order_amount 和 settlements 的金额差异」）。"
+        )
+
+    # ── 构建跨表 key 映射：alias → 本表侧的 key 列名
+    # 逻辑：从 _join_validation 汇总每个 alias 实际使用的 key 列名
+    alias_to_key_col: dict = {}
+    for pair_str, vinfo in join_validation.items():
+        if vinfo.get("match_count", 0) > 0:
+            parts = pair_str.split("-", 1)
+            if len(parts) == 2:
+                alias_a, alias_b = parts
+                if vinfo.get("col_a"):
+                    alias_to_key_col[alias_a] = vinfo["col_a"]
+                if vinfo.get("col_b"):
+                    alias_to_key_col[alias_b] = vinfo["col_b"]
+
+    # fallback：若没有验证结果，用 tables 里的 key_cols
+    for t in tables:
+        if t["alias"] not in alias_to_key_col and t.get("key_cols"):
+            alias_to_key_col[t["alias"]] = t["key_cols"][0]
+
+    # ── 为了 N 路对齐，需要一个"全局 key 空间"
+    # 策略：以第一张表的 key 列值作为主键，其他表的 key 列值映射到同一空间
+    # 这里每张表独立建立 key_value → row_dict 索引，对齐时用各自的 key 列名
+
+    table_indexes: dict = {}  # alias → {key_value → row_dict}
+    all_key_values: set = set()
+
+    for t in tables:
+        alias = t["alias"]
+        result = parallel_results.get(alias, {})
+        if not result.get("success"):
+            logger.warning("nway_diff: table %s failed: %s", alias, result.get("error"))
+            continue
+
+        rows = result.get("rows", [])
+        cols = result.get("columns", [])
+        key_col = alias_to_key_col.get(alias)
+        if not key_col:
+            logger.warning("nway_diff: no key col for alias %s, skip", alias)
+            continue
+
+        idx: dict = {}
+        for row in rows:
+            row_dict = row if isinstance(row, dict) else dict(zip(cols, row))
+            key_val = row_dict.get(key_col)
+            if key_val is not None:
+                idx[key_val] = row_dict
+                all_key_values.add(key_val)
+
+        table_indexes[alias] = idx
+
+    if not all_key_values:
+        return "所有子查询结果均为空，无数据可对比。"
+
+    available_aliases = list(table_indexes.keys())
+    if len(available_aliases) < 2:
+        msg = f"只有 {available_aliases} 有数据，其余表查询失败，无法对比。"
+        if plan_warning:
+            msg += f"\n\n{plan_warning}"
+        return msg
+
+    # ── 遍历所有 key 值，分类差异
+    amount_diffs = []
+    existence_diffs = []
+    first_key_col = alias_to_key_col.get(available_aliases[0], "key")
+
+    for key_val in sorted(all_key_values, key=lambda x: str(x)):
+        present_in = {alias for alias in available_aliases if key_val in table_indexes[alias]}
+        missing_in = set(available_aliases) - present_in
+
+        if missing_in:
+            existence_diffs.append({
+                first_key_col: key_val,
+                "出现在": ", ".join(sorted(present_in)),
+                "缺失于": ", ".join(sorted(missing_in)),
+            })
+            continue
+
+        # 所有表都有此记录 → 比较数值列
+        value_map: dict = {}
+        for t in tables:
+            alias = t["alias"]
+            if alias not in table_indexes:
+                continue
+            row = table_indexes[alias].get(key_val, {})
+            for vc in t.get("value_cols", []):
+                try:
+                    val = float(row.get(vc) or 0)
+                    value_map[f"{alias}.{vc}"] = val
+                except (TypeError, ValueError):
+                    pass
+
+        val_names = list(value_map.keys())
+        has_diff = any(
+            abs(value_map[val_names[i]] - value_map[val_names[j]]) > tolerance
+            for i in range(len(val_names))
+            for j in range(i + 1, len(val_names))
+        )
+
+        if has_diff:
+            rec = {first_key_col: key_val}
+            rec.update(value_map)
+            if len(val_names) >= 2:
+                rec["diff"] = round(value_map[val_names[0]] - value_map[val_names[-1]], 4)
+            amount_diffs.append(rec)
+
+    # ── 生成报告
+    parts = []
+    table_names = " vs ".join(t["alias"] for t in tables if t["alias"] in available_aliases)
+    total_keys = len(all_key_values)
+
+    if plan_warning:
+        parts.append(f"⚠️ {plan_warning}\n")
+
+    if not amount_diffs and not existence_diffs:
+        base = (
+            f"✅ {len(available_aliases)} 张表数据完全一致，共核对 {total_keys:,} 条记录。\n"
+            f"对账表: {table_names}"
+        )
+        return f"{parts[0]}\n{base}" if parts else base
+
+    if amount_diffs:
+        parts.append(f"【金额差异】发现 {len(amount_diffs)} 条记录金额不一致：")
+        parts.append(_format_rows_from_dicts(amount_diffs[:50]))
+        if len(amount_diffs) > 50:
+            parts.append(f"... 共 {len(amount_diffs)} 条，仅展示前 50 条")
+
+    if existence_diffs:
+        parts.append(f"\n【存在性差异】发现 {len(existence_diffs)} 条记录在部分表中缺失：")
+        parts.append(_format_rows_from_dicts(existence_diffs[:50]))
+        if len(existence_diffs) > 50:
+            parts.append(f"... 共 {len(existence_diffs)} 条，仅展示前 50 条")
+
+    parts.append(f"\n对账范围：{table_names}，共核对 {total_keys:,} 条记录")
+    return "\n".join(parts)
+    tables = recon_plan.get("tables", [])
+    join_keys = recon_plan.get("join_keys", [])
+    tolerance = float(recon_plan.get("tolerance", 0.01))
+
+    if not tables or len(tables) < 2:
+        return _diff_parallel_results(parallel_results, "")
+
+    # ── 构建每张表的 {join_key_tuple → row_dict} 索引
+    table_indexes: dict[str, dict] = {}  # alias → {key_tuple → row_dict}
+    all_key_tuples: set = set()
+
+    for t in tables:
+        alias = t["alias"]
+        result = parallel_results.get(alias, {})
+        if not result.get("success"):
+            logger.warning("nway_diff: table %s failed: %s", alias, result.get("error"))
+            continue
+
+        rows = result.get("rows", [])
+        cols = result.get("columns", [])
+        key_cols = t["key_cols"]
+
+        idx: dict = {}
+        for row in rows:
+            if isinstance(row, dict):
+                row_dict = row
+            else:
+                row_dict = dict(zip(cols, row))
+
+            # 构建 join key tuple
+            key = tuple(row_dict.get(k) for k in key_cols)
+            idx[key] = row_dict
+            all_key_tuples.add(key)
+
+        table_indexes[alias] = idx
+
+    if not all_key_tuples:
+        return "所有子查询结果均为空，无数据可对比。"
+
+    available_aliases = list(table_indexes.keys())
+    if len(available_aliases) < 2:
+        return f"只有 {available_aliases} 有数据，其余表查询失败，无法对比。"
+
+    # ── 遍历所有 key，分类差异
+    amount_diffs = []       # 金额不等
+    existence_diffs = []    # 存在性缺失
+
+    for key in sorted(all_key_tuples, key=lambda x: str(x)):
+        present_in = {alias for alias in available_aliases if key in table_indexes[alias]}
+        missing_in = set(available_aliases) - present_in
+
+        if missing_in:
+            # 存在性差异：某些表缺失此记录
+            rec = {kc: key[i] for i, kc in enumerate(join_keys[:len(key)])}
+            rec["出现在"] = ", ".join(sorted(present_in))
+            rec["缺失于"] = ", ".join(sorted(missing_in))
+            existence_diffs.append(rec)
+            continue
+
+        # 所有表都有此记录 → 比较数值列
+        value_map: dict[str, float] = {}
+        for t in tables:
+            alias = t["alias"]
+            if alias not in table_indexes:
+                continue
+            row = table_indexes[alias].get(key, {})
+            for vc in t.get("value_cols", []):
+                try:
+                    val = float(row.get(vc) or 0)
+                    value_map[f"{alias}.{vc}"] = val
+                except (TypeError, ValueError):
+                    pass
+
+        # 两两比较所有数值列
+        val_names = list(value_map.keys())
+        has_diff = False
+        for i in range(len(val_names)):
+            for j in range(i + 1, len(val_names)):
+                va, vb = value_map[val_names[i]], value_map[val_names[j]]
+                if abs(va - vb) > tolerance:
+                    has_diff = True
+                    break
+            if has_diff:
+                break
+
+        if has_diff:
+            rec = {kc: key[i] for i, kc in enumerate(join_keys[:len(key)])}
+            rec.update(value_map)
+            # 计算差值（第一列减最后一列）
+            if len(val_names) >= 2:
+                rec["diff"] = round(value_map[val_names[0]] - value_map[val_names[-1]], 4)
+            amount_diffs.append(rec)
+
+    # ── 生成报告
+    parts = []
+    table_names = " vs ".join(t["alias"] for t in tables)
+    total_keys = len(all_key_tuples)
+
+    if not amount_diffs and not existence_diffs:
+        return (
+            f"✅ {len(available_aliases)} 张表数据完全一致，共核对 {total_keys:,} 条记录。\n"
+            f"对账表: {table_names}"
+        )
+
+    if amount_diffs:
+        parts.append(f"【金额差异】发现 {len(amount_diffs)} 条记录金额不一致：")
+        parts.append(_format_rows_from_dicts(amount_diffs[:50]))
+        if len(amount_diffs) > 50:
+            parts.append(f"... 共 {len(amount_diffs)} 条，仅展示前 50 条")
+
+    if existence_diffs:
+        parts.append(f"\n【存在性差异】发现 {len(existence_diffs)} 条记录在部分表中缺失：")
+        parts.append(_format_rows_from_dicts(existence_diffs[:50]))
+        if len(existence_diffs) > 50:
+            parts.append(f"... 共 {len(existence_diffs)} 条，仅展示前 50 条")
+
+    parts.append(f"\n对账范围：{table_names}，共核对 {total_keys:,} 条记录")
+    return "\n".join(parts)
+
+
+def _format_rows_from_dicts(rows: list) -> str:
+    """将 dict 列表格式化为对齐表格。"""
+    if not rows:
+        return "（空）"
+    cols = list(rows[0].keys())
+    col_widths = [len(str(c)) for c in cols]
+    for row in rows:
+        for i, c in enumerate(cols):
+            col_widths[i] = max(col_widths[i], len(_format_value(row.get(c))))
+
+    header = " | ".join(str(c).ljust(col_widths[i]) for i, c in enumerate(cols))
+    sep = "-+-".join("-" * w for w in col_widths)
+    lines = [header, sep]
+    for row in rows:
+        cells = [_format_value(row.get(c)).ljust(col_widths[i]) for i, c in enumerate(cols)]
+        lines.append(" | ".join(cells))
+    return "\n".join(lines)
+
+
+def _diff_parallel_results(parallel_results: dict, query: str) -> str:
+    """对 parallel_results 中的两个子查询结果做差值对比（diff_calculator 核心逻辑）。
+
+    策略：
+    1. 找两表共同列（作为 join key）
+    2. 找各自的数值列（金额/数量等）
+    3. LEFT JOIN 对齐后找出差异行
+    4. 格式化输出
+    """
+    if not parallel_results or len(parallel_results) < 2:
+        return ""
+
+    aliases = list(parallel_results.keys())
+    left_alias, right_alias = aliases[0], aliases[1]
+    left  = parallel_results[left_alias]
+    right = parallel_results[right_alias]
+
+    if not left.get("success") or not right.get("success"):
+        failed = [a for a in aliases if not parallel_results[a].get("success")]
+        return f"子查询失败（{', '.join(failed)}），无法进行差异对比。"
+
+    left_rows  = left.get("rows", [])
+    right_rows = right.get("rows", [])
+    left_cols  = left.get("columns", [])
+    right_cols = right.get("columns", [])
+
+    if not left_rows or not right_rows:
+        empty = []
+        if not left_rows:  empty.append(left_alias)
+        if not right_rows: empty.append(right_alias)
+        return f"子查询结果为空（{', '.join(empty)}），无差异数据可对比。"
+
+    # ── 推断 join key（共同列中非数值的文本 key，优先选 *_no / *_id / order_no 等）
+    def _is_id_col(name: str) -> bool:
+        name_lower = name.lower()
+        return any(k in name_lower for k in ("_no", "_id", "id", "no", "code", "key"))
+
+    common_cols = [c for c in left_cols if c in right_cols]
+    join_keys = [c for c in common_cols if _is_id_col(c)]
+    if not join_keys:
+        join_keys = common_cols[:1]  # fallback: 用第一个共同列
+    if not join_keys:
+        return f"两个子查询无共同列（{left_cols} vs {right_cols}），无法对比差异。"
+
+    # ── 推断金额列（数值型列，优先 amount / total / sum / fee / gmv 等）
+    def _is_amount_col(name: str) -> bool:
+        n = name.lower()
+        return any(k in n for k in ("amount", "total", "sum", "fee", "gmv", "revenue", "价格", "金额", "价值"))
+
+    def _get_numeric_cols(cols):
+        amount_cols = [c for c in cols if _is_amount_col(c)]
+        return amount_cols if amount_cols else [c for c in cols if c not in join_keys]
+
+    left_val_cols  = _get_numeric_cols([c for c in left_cols  if c not in join_keys])
+    right_val_cols = _get_numeric_cols([c for c in right_cols if c not in join_keys])
+
+    # ── 转换为 dict，以 join key 索引
+    def _rows_to_dict(rows, cols, key_cols):
+        result = {}
+        for row in rows:
+            if isinstance(row, dict):
+                vals = row
+            else:
+                vals = dict(zip(cols, row))
+            k = tuple(vals.get(kc) for kc in key_cols)
+            result[k] = vals
+        return result
+
+    left_dict  = _rows_to_dict(left_rows,  left_cols,  join_keys)
+    right_dict = _rows_to_dict(right_rows, right_cols, join_keys)
+
+    all_keys = set(left_dict.keys()) | set(right_dict.keys())
+
+    # ── 找差异
+    diff_rows = []
+    for k in sorted(all_keys, key=lambda x: str(x)):
+        lv = left_dict.get(k)
+        rv = right_dict.get(k)
+
+        if lv is None:
+            row = {jk: k[i] for i, jk in enumerate(join_keys)}
+            for vc in right_val_cols:
+                row[f"{right_alias}.{vc}"] = rv.get(vc)
+            for vc in left_val_cols:
+                row[f"{left_alias}.{vc}"] = None
+            row["diff"] = None
+            diff_rows.append(row)
+        elif rv is None:
+            row = {jk: k[i] for i, jk in enumerate(join_keys)}
+            for vc in left_val_cols:
+                row[f"{left_alias}.{vc}"] = lv.get(vc)
+            for vc in right_val_cols:
+                row[f"{right_alias}.{vc}"] = None
+            row["diff"] = None
+            diff_rows.append(row)
+        else:
+            # 同时存在，比较数值
+            lval = None
+            rval = None
+            if left_val_cols:
+                try: lval = float(lv.get(left_val_cols[0]) or 0)
+                except: pass
+            if right_val_cols:
+                try: rval = float(rv.get(right_val_cols[0]) or 0)
+                except: pass
+
+            if lval is not None and rval is not None:
+                diff_val = round(lval - rval, 4)
+                if abs(diff_val) > 0.001:  # 有差异才记录
+                    row = {jk: k[i] for i, jk in enumerate(join_keys)}
+                    if left_val_cols:
+                        row[f"{left_alias}.{left_val_cols[0]}"] = lval
+                    if right_val_cols:
+                        row[f"{right_alias}.{right_val_cols[0]}"] = rval
+                    row["diff"] = diff_val
+                    diff_rows.append(row)
+
+    if not diff_rows:
+        return f"✅ 两表数据完全一致，无差异记录。\n（{left_alias}: {len(left_rows)} 行，{right_alias}: {len(right_rows)} 行）"
+
+    # ── 格式化差异表
+    col_names = list(diff_rows[0].keys())
+    col_widths = [len(c) for c in col_names]
+    for row in diff_rows:
+        for i, c in enumerate(col_names):
+            col_widths[i] = max(col_widths[i], len(_format_value(row.get(c))))
+
+    header    = " | ".join(c.ljust(col_widths[i]) for i, c in enumerate(col_names))
+    separator = "-+-".join("-" * w for w in col_widths)
+    lines = [
+        f"发现 {len(diff_rows)} 条差异记录（{left_alias} vs {right_alias}）：",
+        "",
+        header,
+        separator,
+    ]
+    for row in diff_rows[:50]:
+        cells = [_format_value(row.get(c)).ljust(col_widths[i]) for i, c in enumerate(col_names)]
+        lines.append(" | ".join(cells))
+    if len(diff_rows) > 50:
+        lines.append(f"\n... 共 {len(diff_rows)} 条差异，仅展示前 50 条")
+
+    return "\n".join(lines)
+
+
+def _summarize_observations(obs: list, state: dict = None) -> str:
     if not obs:
         return ""
+
+    # ── 优先：检测是否来自 parallel_act（多子任务结果）
+    parallel_obs = [o for o in obs if o.get("source") == "parallel_act"]
+    if parallel_obs and state is not None:
+        parallel_results = state.get("parallel_results", {})
+        query = state.get("query", "")
+        if parallel_results and len(parallel_results) >= 2:
+            # 检查是否有 ReconPlanner 的结构化计划
+            plan_steps = state.get("plan_steps", [])
+            recon_plan = None
+            for step in plan_steps:
+                if isinstance(step, dict) and "_recon_plan" in step:
+                    recon_plan = step["_recon_plan"]
+                    break
+
+            if recon_plan and recon_plan.get("tables"):
+                # 使用 N-way Diff Engine
+                diff_text = _nway_diff_engine(parallel_results, recon_plan)
+            else:
+                # fallback：旧的启发式 diff
+                diff_text = _diff_parallel_results(parallel_results, query)
+
+            if diff_text:
+                sqls = []
+                for alias, r in parallel_results.items():
+                    sql = r.get("sql", "")
+                    if sql:
+                        sqls.append(f"[{alias}]\n{_format_sql(sql)}")
+                sql_block = "\n\n".join(sqls)
+                return f"{diff_text}\n\n─── 执行的 SQL ───\n{sql_block}" if sql_block else diff_text
+
     last = obs[-1]
     if not last.get("success"):
         return f"工具失败：{last.get('error', '未知错误')}"
@@ -248,7 +723,7 @@ def observe_node(state: GraphState) -> dict:
         last_obs = observations[-1]
         last_call = tool_calls[-1] if tool_calls else {}
 
-        # 提取 SQL（如果最后是 sql_runner）
+        # 提取 SQL（如果最后是 sql_runner，或从 parallel_results 提取）
         sql = ""
         if last_call.get("name") == "sql_runner":
             raw_sql = last_obs.get("final_sql") or last_call.get("args", {}).get("sql", "")
@@ -256,9 +731,14 @@ def observe_node(state: GraphState) -> dict:
                 sql = ""
             else:
                 sql = _format_sql(raw_sql)
+        elif last_obs.get("source") == "parallel_act":
+            # parallel 路径：拼接所有子查询 SQL
+            parallel_results = state.get("parallel_results", {})
+            sqls = [_format_sql(r.get("sql", "")) for r in parallel_results.values() if r.get("sql")]
+            sql = "\n\n".join(sqls) if sqls else ""
 
         # 构造 answer
-        summary = _summarize_observations(observations)
+        summary = _summarize_observations(observations, state=state)
         if last_obs.get("success"):
             answer = summary
             status = "ok"

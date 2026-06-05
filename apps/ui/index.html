@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Recon Agent — SQL 对账助手</title>
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
 <style>
 /* ─────────────────────────────────────────────
    Design tokens — industrial precision palette
@@ -53,6 +54,77 @@ body {
   grid-template-rows: auto 1fr;
   overflow: hidden;
 }
+
+/* ─────────────────────────────────────────────
+   Login Overlay
+───────────────────────────────────────────── */
+.login-overlay {
+  position: fixed; inset: 0; z-index: 9999;
+  background: oklch(8% 0.006 250 / 92%);
+  display: flex; align-items: center; justify-content: center;
+  backdrop-filter: blur(8px);
+  transition: opacity .25s;
+}
+.login-overlay.hidden { display: none; }
+
+.login-box {
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 36px 40px 32px;
+  width: 360px;
+  display: flex; flex-direction: column; gap: 16px;
+  box-shadow: 0 24px 48px oklch(0% 0 0 / 40%);
+}
+.login-logo {
+  display: flex; align-items: center; gap: 10px;
+  margin-bottom: 4px;
+}
+.login-logo svg { flex-shrink: 0; }
+.login-title {
+  font-size: 17px; font-weight: 600;
+  color: var(--text-bright); letter-spacing: -.02em;
+}
+.login-subtitle {
+  font-size: 12.5px; color: var(--text-muted);
+  margin-top: -8px;
+}
+.login-field {
+  display: flex; flex-direction: column; gap: 6px;
+}
+.login-label {
+  font-size: 11.5px; color: var(--text-sub); font-weight: 500;
+}
+.login-input {
+  background: var(--bg-raised); border: 1px solid var(--border);
+  border-radius: var(--radius-sm); padding: 9px 12px;
+  color: var(--text-bright); font-size: 13.5px;
+  outline: none; transition: border-color .15s;
+  font-family: inherit;
+}
+.login-input:focus { border-color: var(--accent); }
+.login-btn {
+  margin-top: 4px;
+  background: var(--accent); color: oklch(15% 0.01 250);
+  border: none; border-radius: var(--radius-sm);
+  padding: 10px; font-size: 13.5px; font-weight: 600;
+  cursor: pointer; transition: opacity .15s; font-family: inherit;
+}
+.login-btn:hover { opacity: .88; }
+.login-err {
+  font-size: 12px; color: var(--fail);
+  min-height: 16px; text-align: center;
+}
+.login-user-bar {
+  display: flex; align-items: center; gap: 8px;
+  font-size: 12px; color: var(--text-sub);
+}
+.login-user-dot {
+  width: 7px; height: 7px; border-radius: 50%;
+  background: var(--ok);
+  flex-shrink: 0;
+}
+
 
 /* ─────────── Font import ─────────── */
 @import url('https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=DM+Mono:wght@400;500&family=Noto+Sans+SC:wght@300;400;500&display=swap');
@@ -622,6 +694,19 @@ pre.sql-code {
   font-weight: 400;
 }
 
+.answer-pre {
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--text-bright);
+  font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
+  white-space: pre;
+  overflow-x: auto;
+  margin: 0;
+  background: none;
+  border: none;
+  padding: 0;
+}
+
 /* ─── Metric pills ─── */
 .metric-row {
   display: flex;
@@ -680,6 +765,18 @@ pre.sql-code {
   font-size: 11px;
   color: var(--text-muted);
   margin-left: 4px;
+}
+
+/* 重新生成提示气泡 */
+.msg.system-notice {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px 14px;
+  border-left: 2px solid var(--accent);
+  background: rgba(245, 158, 11, 0.05);
+  border-radius: 4px;
+  margin: 4px 0;
 }
 
 /* ─────────────────────────────────────────────
@@ -1386,6 +1483,45 @@ footer {
 </head>
 <body>
 
+<!-- ═══════════ Login Overlay ═══════════ -->
+<div id="loginOverlay" class="login-overlay">
+  <div class="login-box">
+    <div class="login-logo">
+      <svg width="28" height="28" viewBox="0 0 28 28" fill="none">
+        <rect x="2" y="2" width="11" height="11" rx="2" fill="oklch(72% 0.16 75 / 30%)" stroke="oklch(72% 0.16 75)" stroke-width="1.2"/>
+        <rect x="15" y="2" width="11" height="11" rx="2" fill="oklch(72% 0.16 75 / 10%)" stroke="oklch(50% 0.008 250)" stroke-width="1.2"/>
+        <rect x="2" y="15" width="11" height="11" rx="2" fill="oklch(72% 0.16 75 / 10%)" stroke="oklch(50% 0.008 250)" stroke-width="1.2"/>
+        <rect x="15" y="15" width="11" height="11" rx="2" fill="oklch(72% 0.16 75 / 10%)" stroke="oklch(50% 0.008 250)" stroke-width="1.2"/>
+      </svg>
+      <span class="login-title">SQL Reconciliation Agent</span>
+    </div>
+    <div class="login-subtitle">请登录后继续使用</div>
+    <div class="login-field">
+      <label class="login-label">用户名</label>
+      <input id="loginUser" class="login-input" placeholder="输入用户名" autocomplete="username" />
+    </div>
+    <div class="login-field">
+      <label class="login-label">密码</label>
+      <input id="loginPwd" class="login-input" type="password" placeholder="输入密码"
+             autocomplete="current-password" onkeydown="if(event.key==='Enter') doLogin()" />
+    </div>
+    <button class="login-btn" onclick="doLogin()">登 录</button>
+    <div id="loginErr" class="login-err"></div>
+    <!-- 演示账号提示 -->
+    <div style="margin-top:4px;padding:10px 12px;background:var(--bg-raised);border:1px solid var(--border-dim);border-radius:var(--radius-sm)">
+      <div style="font-size:10.5px;color:var(--text-muted);margin-bottom:6px;letter-spacing:.04em;text-transform:uppercase">演示账号</div>
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <div style="font-size:12px;color:var(--text-sub)">
+          用户名：<code style="color:var(--accent);font-family:'DM Mono',monospace">test</code>
+          &nbsp;&nbsp;
+          密码：<code style="color:var(--accent);font-family:'DM Mono',monospace">test123</code>
+        </div>
+        <button onclick="fillDemo()" style="font-size:11px;padding:3px 9px;background:var(--bg-overlay);border:1px solid var(--border);border-radius:4px;color:var(--text-sub);cursor:pointer;font-family:inherit;transition:color .15s" onmouseover="this.style.color='var(--text-bright)'" onmouseout="this.style.color='var(--text-sub)'">一键填入</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- ═══════════ Header ═══════════ -->
 <header>
   <div class="header-logo">
@@ -1425,6 +1561,15 @@ footer {
   </div>
 
   <div class="header-divider"></div>
+
+  <!-- 当前登录用户 -->
+  <div class="login-user-bar" id="headerUserBar" style="display:none">
+    <div class="login-user-dot"></div>
+    <span id="headerUsername">-</span>
+    <span style="color:var(--border-lit)">·</span>
+    <a href="#" style="color:var(--text-muted);font-size:11px;text-decoration:none"
+       onclick="doLogout();return false">退出</a>
+  </div>
 
   <div class="status-dot">API Ready</div>
 </header>
@@ -1490,6 +1635,13 @@ footer {
         <path d="M9.5 7.5v4M7.5 9.5h4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
       </svg>
       功能
+    </div>
+    <div class="sp-tab" onclick="switchTab(this,'tab-model')" data-tab="tab-model">
+      <svg width="13" height="13" viewBox="0 0 13 13" fill="none">
+        <circle cx="6.5" cy="6.5" r="4.5" stroke="currentColor" stroke-width="1.2"/>
+        <path d="M6.5 4v2.5l1.5 1.5" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>
+      </svg>
+      模型
     </div>
   </div>
 
@@ -1664,6 +1816,54 @@ footer {
       </div>
     </div>
   </div>
+
+  <!-- Tab: 模型配置 -->
+  <div class="sp-body" id="tab-model" style="display:none">
+    <div class="sp-section">
+      <div class="sp-section-label">LLM 模型配置（租户级别）</div>
+      <div class="sp-field">
+        <label class="sp-label">Provider</label>
+        <select class="sp-input" id="modelProvider">
+          <option value="">-- 跟随全局配置 --</option>
+          <option value="openai">OpenAI</option>
+          <option value="deepseek">DeepSeek</option>
+          <option value="anthropic">Anthropic (Claude)</option>
+          <option value="azure">Azure OpenAI</option>
+          <option value="ollama">Ollama（本地）</option>
+          <option value="openai">Custom（OpenAI 兼容）</option>
+        </select>
+      </div>
+      <div class="sp-field">
+        <label class="sp-label">Model 名称</label>
+        <input class="sp-input" id="modelName" placeholder="如 gpt-4o / deepseek-chat" />
+      </div>
+      <div class="sp-field">
+        <label class="sp-label">API Key</label>
+        <input class="sp-input" id="modelApiKey" type="password" placeholder="留空则使用服务端全局 Key" autocomplete="off" />
+      </div>
+      <div class="sp-field">
+        <label class="sp-label">Base URL（可选）</label>
+        <input class="sp-input" id="modelBaseUrl" placeholder="如 http://localhost:11434/v1（Ollama 等）" />
+      </div>
+      <div class="sp-field">
+        <label class="sp-label">Temperature</label>
+        <div style="display:flex;align-items:center;gap:10px;flex:1">
+          <input type="range" id="modelTemp" min="0" max="2" step="0.1" value="0"
+            style="flex:1;accent-color:var(--accent)"
+            oninput="document.getElementById('modelTempVal').textContent=parseFloat(this.value).toFixed(1)" />
+          <span id="modelTempVal" style="font-size:12px;color:var(--text-sub);min-width:28px">0.0</span>
+        </div>
+      </div>
+    </div>
+    <div class="sp-section">
+      <div style="display:flex;gap:8px">
+        <button class="sp-btn" style="flex:1" onclick="loadModelConfig()">重新加载</button>
+        <button class="sp-btn primary" style="flex:1" onclick="saveModelConfig()">保存配置</button>
+      </div>
+      <div id="modelSaveMsg" style="margin-top:8px;font-size:12px;color:var(--ok);min-height:16px;text-align:center"></div>
+    </div>
+  </div>
+
     </div><!-- end settingsPanel -->
   </aside>
 
@@ -1838,6 +2038,87 @@ footer {
 const API_BASE = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
   ? 'http://localhost:8000'
   : `${window.location.protocol}//${window.location.hostname}`;
+
+/* ─────────────────────────────────────────────
+   Auth helpers
+───────────────────────────────────────────── */
+function getToken() { return localStorage.getItem('recon_token') || ''; }
+function getTenantId() { return localStorage.getItem('recon_tenant_id') || ''; }
+function getUsername() { return localStorage.getItem('recon_username') || ''; }
+
+function showLoginOverlay() {
+  document.getElementById('loginOverlay').classList.remove('hidden');
+  document.getElementById('headerUserBar').style.display = 'none';
+}
+
+function hideLoginOverlay() {
+  document.getElementById('loginOverlay').classList.add('hidden');
+  const bar = document.getElementById('headerUserBar');
+  bar.style.display = 'flex';
+  document.getElementById('headerUsername').textContent = getUsername();
+}
+
+function fillDemo() {
+  document.getElementById('loginUser').value = 'test';
+  document.getElementById('loginPwd').value = 'test123';
+  document.getElementById('loginErr').textContent = '';
+}
+
+async function doLogin() {
+  const username = document.getElementById('loginUser').value.trim();
+  const password = document.getElementById('loginPwd').value;
+  const errEl = document.getElementById('loginErr');
+  errEl.textContent = '';
+  if (!username || !password) { errEl.textContent = '请输入用户名和密码'; return; }
+  try {
+    const r = await fetch(`${API_BASE}/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, password }),
+    });
+    if (!r.ok) {
+      const d = await r.json().catch(() => ({}));
+      errEl.textContent = d.detail || '登录失败，请检查用户名或密码';
+      return;
+    }
+    const d = await r.json();
+    localStorage.setItem('recon_token', d.token);
+    localStorage.setItem('recon_tenant_id', d.tenant_id);
+    localStorage.setItem('recon_username', d.username);
+    hideLoginOverlay();
+    initApp();
+  } catch (e) {
+    errEl.textContent = '网络错误，请稍后重试';
+  }
+}
+
+function doLogout() {
+  localStorage.removeItem('recon_token');
+  localStorage.removeItem('recon_tenant_id');
+  localStorage.removeItem('recon_username');
+  showLoginOverlay();
+  document.getElementById('loginUser').value = '';
+  document.getElementById('loginPwd').value = '';
+}
+
+/**
+ * 统一 fetch 封装 — 自动注入 Bearer Token，遇 401 弹登录框。
+ */
+function authFetch(url, opts = {}) {
+  const token = getToken();
+  opts.headers = {
+    ...(opts.headers || {}),
+    ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+  };
+  return fetch(url, opts).then(r => {
+    if (r.status === 401) {
+      showLoginOverlay();
+      throw new Error('Unauthorized');
+    }
+    return r;
+  });
+}
+
 /* ─────────────────────────────────────────────
    Multi-session state
 ───────────────────────────────────────────── */
@@ -1851,7 +2132,7 @@ function genId() { return 'sess_' + Date.now() + '_' + Math.random().toString(36
 
 async function createSessionOnServer(id, title) {
   try {
-    await fetch(`${API_BASE}/sessions`, {
+    await authFetch(`${API_BASE}/sessions`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ id, title, messages: [], status: 'ok', ts: Date.now(), updated: Date.now() }),
@@ -1861,7 +2142,7 @@ async function createSessionOnServer(id, title) {
 
 async function appendMessageToServer(sessionId, msg) {
   try {
-    await fetch(`${API_BASE}/sessions/${sessionId}/messages`, {
+    await authFetch(`${API_BASE}/sessions/${sessionId}/messages`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(msg),
@@ -1870,14 +2151,14 @@ async function appendMessageToServer(sessionId, msg) {
 }
 
 async function loadSessionFromServer(sessionId) {
-  const res = await fetch(`${API_BASE}/sessions/${sessionId}`);
+  const res = await authFetch(`${API_BASE}/sessions/${sessionId}`);
   if (!res.ok) throw new Error('not found');
   return res.json();
 }
 
 async function listSessionsFromServer() {
   try {
-    const res = await fetch(`${API_BASE}/sessions?limit=60`);
+    const res = await authFetch(`${API_BASE}/sessions?limit=60`);
     if (res.ok) return res.json();
   } catch {}
   return [];
@@ -1941,9 +2222,13 @@ async function switchToSession(id) {
 /* ── 初始化：拉取会话列表 ── */
 async function restoreSessions() {
   const sessions = await listSessionsFromServer();
-  if (!sessions.length) return;
 
   const list = document.getElementById('history-list');
+  // 每次重新渲染前先清空，防止重复调用导致条目重复
+  list.innerHTML = '';
+
+  if (!sessions.length) return;
+
   // sessions 已按 updated 倒序（最新在前），insertBefore firstChild → 最新在顶
   // 但因为 insertBefore 逐条插入，最后插入的在最前，所以要反转遍历
   [...sessions].reverse().forEach(s => {
@@ -2002,6 +2287,7 @@ function switchTab(el, tabId) {
   document.getElementById(tabId).style.display = 'block';
   if (tabId === 'tab-kb') kbLoadList();
   if (tabId === 'tab-features') loadAgentList();
+  if (tabId === 'tab-model') loadModelConfig();
 }
 
 function toggleSwitch(id) {
@@ -2022,9 +2308,11 @@ async function triggerReindex() {
   const msg = document.getElementById('reindexMsg');
   msg.textContent = '正在重建索引…';
   try {
-    const r = await fetch(`${API_BASE}/admin/reindex`, { method: 'POST' });
+    const dbPath = document.getElementById('cfgDbPath')?.value?.trim();
+    const url = dbPath ? `${API_BASE}/admin/reindex?target_db=${encodeURIComponent(dbPath)}` : `${API_BASE}/admin/reindex`;
+    const r = await authFetch(url, { method: 'POST' });
     const d = await r.json();
-    msg.textContent = d.message || '索引重建成功';
+    msg.textContent = d.message || `索引重建成功（${d.tables || '?'} 张表）`;
     msg.style.color = 'var(--ok)';
   } catch {
     msg.textContent = '服务未就绪，请先启动 API';
@@ -2035,7 +2323,9 @@ async function triggerReindex() {
 
 async function rebuildKb() {
   try {
-    await fetch(`${API_BASE}/admin/reindex`, { method: 'POST' });
+    const dbPath2 = document.getElementById('cfgDbPath')?.value?.trim();
+    const reindexUrl = dbPath2 ? `${API_BASE}/admin/reindex?target_db=${encodeURIComponent(dbPath2)}` : `${API_BASE}/admin/reindex`;
+    await authFetch(reindexUrl, { method: 'POST' });
     alert('索引重建已触发');
   } catch { alert('服务未就绪'); }
 }
@@ -2047,7 +2337,7 @@ async function kbLoadList() {
   const listEl = document.getElementById('kbDocList');
   const countEl = document.getElementById('kbDocCount');
   try {
-    const r = await fetch(`${API_BASE}/kb/docs`);
+    const r = await authFetch(`${API_BASE}/kb/docs`);
     const d = await r.json();
     countEl.textContent = `${d.total} 个文档`;
     if (d.docs.length === 0) {
@@ -2077,7 +2367,7 @@ async function kbLoadList() {
 
 async function kbOpenDoc(name) {
   try {
-    const r = await fetch(`${API_BASE}/kb/docs/${encodeURIComponent(name)}`);
+    const r = await authFetch(`${API_BASE}/kb/docs/${encodeURIComponent(name)}`);
     const d = await r.json();
     _kbCurrentFile = name;
     document.getElementById('kbPreviewTitle').textContent = name;
@@ -2090,7 +2380,7 @@ async function kbSaveEdit() {
   if (!_kbCurrentFile) return;
   const content = document.getElementById('kbPreviewContent').value;
   try {
-    const r = await fetch(`${API_BASE}/kb/docs/${encodeURIComponent(_kbCurrentFile)}`, {
+    const r = await authFetch(`${API_BASE}/kb/docs/${encodeURIComponent(_kbCurrentFile)}`, {
       method: 'PUT',
       headers: {'Content-Type':'application/json'},
       body: JSON.stringify({content}),
@@ -2110,7 +2400,7 @@ function closeKbPreview() {
 async function kbDeleteDoc(name) {
   if (!confirm(`确认删除 ${name}？`)) return;
   try {
-    await fetch(`${API_BASE}/kb/docs/${encodeURIComponent(name)}`, { method: 'DELETE' });
+    await authFetch(`${API_BASE}/kb/docs/${encodeURIComponent(name)}`, { method: 'DELETE' });
     if (_kbCurrentFile === name) closeKbPreview();
     kbLoadList();
   } catch { alert('删除失败'); }
@@ -2122,7 +2412,7 @@ async function kbUploadFile(input) {
   const formData = new FormData();
   formData.append('file', file);
   try {
-    const r = await fetch(`${API_BASE}/kb/docs`, { method: 'POST', body: formData });
+    const r = await authFetch(`${API_BASE}/kb/docs`, { method: 'POST', body: formData });
     const d = await r.json();
     if (!r.ok) throw new Error(d.detail || '上传失败');
     input.value = '';
@@ -2159,7 +2449,7 @@ function renderAgentList(agents) {
 async function loadAgentList() {
   const msgEl = document.getElementById('agentLoadMsg');
   try {
-    const r = await fetch(`${API_BASE}/agents`);
+    const r = await authFetch(`${API_BASE}/agents`);
     const d = await r.json();
     _agentList = d.agents || [];
     renderAgentList(_agentList);
@@ -2229,7 +2519,7 @@ async function saveAgentConfig() {
   };
   if (!payload.name) { alert('Agent 名称不能为空'); return; }
   try {
-    const r = await fetch(`${API_BASE}/agents/${_currentAgentId}`, {
+    const r = await authFetch(`${API_BASE}/agents/${_currentAgentId}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
@@ -2245,7 +2535,7 @@ async function deleteCurrentAgent() {
   if (!_currentAgentId) return;
   if (!confirm(`确定要删除此 Agent 吗？`)) return;
   try {
-    const r = await fetch(`${API_BASE}/agents/${_currentAgentId}`, { method: 'DELETE' });
+    const r = await authFetch(`${API_BASE}/agents/${_currentAgentId}`, { method: 'DELETE' });
     const d = await r.json();
     if (!r.ok) throw new Error(d.detail || '删除失败');
     await loadAgentList();
@@ -2285,7 +2575,7 @@ async function submitAddAgent() {
     system_prompt: '',
   };
   try {
-    const r = await fetch(`${API_BASE}/agents`, {
+    const r = await authFetch(`${API_BASE}/agents`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
@@ -2304,7 +2594,7 @@ async function loadEvoStatus() {
   const rulesEl = document.getElementById('evoRules');
   const pendEl  = document.getElementById('evoPending');
   try {
-    const r = await fetch(`${API_BASE}/evolution/status`);
+    const r = await authFetch(`${API_BASE}/evolution/status`);
     const d = await r.json();
     rulesEl.textContent = d.semantic_rules ?? '—';
     pendEl.textContent  = d.pending_cases  ?? '—';
@@ -2323,11 +2613,66 @@ async function triggerEvo() {
   stateEl.textContent = '进化中…';
   stateEl.style.color = 'var(--warn)';
   try {
-    await fetch(`${API_BASE}/evolution/run`, { method: 'POST' });
+    await authFetch(`${API_BASE}/evolution/run`, { method: 'POST' });
     setTimeout(() => { loadEvoStatus(); stateEl.textContent = '运行中'; stateEl.style.color = 'var(--ok)'; }, 2000);
   } catch {
     stateEl.textContent = '离线';
     stateEl.style.color = 'var(--fail)';
+  }
+}
+
+/* ─────────────────────────────────────────────
+   Model Config
+───────────────────────────────────────────── */
+async function loadModelConfig() {
+  const msgEl = document.getElementById('modelSaveMsg');
+  if (msgEl) msgEl.textContent = '';
+  try {
+    const r = await authFetch(`${API_BASE}/tenants/me/model`);
+    if (!r.ok) return;
+    const d = await r.json();
+    const providerEl = document.getElementById('modelProvider');
+    if (providerEl) providerEl.value = d.provider || '';
+    const nameEl = document.getElementById('modelName');
+    if (nameEl) nameEl.value = d.model || '';
+    const keyEl = document.getElementById('modelApiKey');
+    if (keyEl) keyEl.placeholder = d.api_key ? '已设置（点击重新输入）' : '留空则使用服务端全局 Key';
+    const urlEl = document.getElementById('modelBaseUrl');
+    if (urlEl) urlEl.value = d.base_url || '';
+    const tempEl = document.getElementById('modelTemp');
+    if (tempEl) {
+      tempEl.value = d.temperature || 0;
+      document.getElementById('modelTempVal').textContent = parseFloat(d.temperature || 0).toFixed(1);
+    }
+  } catch (e) {
+    console.warn('loadModelConfig failed', e);
+  }
+}
+
+async function saveModelConfig() {
+  const msgEl = document.getElementById('modelSaveMsg');
+  if (msgEl) { msgEl.textContent = '保存中…'; msgEl.style.color = 'var(--text-sub)'; }
+  const payload = {
+    provider: document.getElementById('modelProvider')?.value || '',
+    model: document.getElementById('modelName')?.value || '',
+    api_key: document.getElementById('modelApiKey')?.value || '',
+    base_url: document.getElementById('modelBaseUrl')?.value || '',
+    temperature: parseFloat(document.getElementById('modelTemp')?.value || '0'),
+  };
+  try {
+    const r = await authFetch(`${API_BASE}/tenants/me/model`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    if (r.ok) {
+      if (msgEl) { msgEl.textContent = '✓ 保存成功'; msgEl.style.color = 'var(--ok)'; }
+      setTimeout(() => { if (msgEl) msgEl.textContent = ''; }, 3000);
+    } else {
+      if (msgEl) { msgEl.textContent = '保存失败'; msgEl.style.color = 'var(--fail)'; }
+    }
+  } catch (e) {
+    if (msgEl) { msgEl.textContent = '网络错误'; msgEl.style.color = 'var(--fail)'; }
   }
 }
 
@@ -2450,13 +2795,20 @@ function renderTable(rows) {
 }
 
 function renderAnswer(text) {
+  // 判断是否包含表格（有 | 分隔符的行）或多行数据，用 <pre> 保留格式
+  const hasTable = /\|.+\|/.test(text) || /^[-\s+]+$/.test(text);
+  const lines = text.split('\n');
+  const hasMultiLine = lines.length > 2;
+  const bodyHtml = (hasTable || hasMultiLine)
+    ? `<pre class="answer-pre">${escapeHtml(text)}</pre>`
+    : `<span class="answer-text">${escapeHtml(text)}</span>`;
   return `
     <div class="answer-card">
       <svg class="answer-icon" viewBox="0 0 18 18" fill="none">
         <circle cx="9" cy="9" r="7.5" stroke="currentColor" stroke-width="1.4"/>
         <path d="M9 8v5M9 6v.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
       </svg>
-      <span class="answer-text">${escapeHtml(text)}</span>
+      ${bodyHtml}
     </div>`;
 }
 
@@ -2506,7 +2858,7 @@ async function submitFeedback(eid, correct) {
   bar.querySelector(`.feedback-btn.${activeClass}`).classList.add('active');
 
   try {
-    const res = await fetch(`${API_BASE}/feedback`, {
+    const res = await authFetch(`${API_BASE}/feedback`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ trace_id: traceId, query, sql, answer, intent, correct }),
@@ -2515,12 +2867,120 @@ async function submitFeedback(eid, correct) {
     // 显示感谢文字
     const thanks = document.createElement('span');
     thanks.className = 'feedback-thanks';
-    thanks.textContent = data.message || (correct ? '感谢确认！' : '已标记，将自动优化。');
-    bar.appendChild(thanks);
+    if (correct) {
+      thanks.textContent = data.message || '感谢确认！';
+      bar.appendChild(thanks);
+    } else {
+      thanks.textContent = '已标记错误，正在重新生成...';
+      bar.appendChild(thanks);
+      // 标记错误后自动重新查询，Memory 里已写入失败 case，LLM 会规避
+      await _rerunQuery(query, bar);
+    }
   } catch (e) {
     // 静默失败，不影响主流程
     console.debug('feedback failed', e);
   }
+}
+
+// 重新执行查询（用于 feedback 标错后自动重生成）
+async function _rerunQuery(query, feedbackBar) {
+  if (!query) return;
+
+  const messages = document.getElementById('messages');
+
+  // 插入一条提示气泡，告知用户正在重新生成
+  const retryNotice = document.createElement('div');
+  retryNotice.className = 'msg system-notice';
+  retryNotice.innerHTML = `
+    <span class="msg-role" style="color:var(--accent)">↺ 重新生成</span>
+    <div class="msg-body" style="color:var(--text-muted);font-size:13px;">
+      已记录错误反馈，正在根据记忆重新生成答案...
+    </div>`;
+  messages.appendChild(retryNotice);
+
+  // Agent 回复气泡（loading 状态）
+  const agentMsg = document.createElement('div');
+  agentMsg.className = 'msg agent';
+  agentMsg.innerHTML = `<span class="msg-role">Agent</span>`;
+  const thinkingEl = document.createElement('div');
+  thinkingEl.className = 'thinking-dots';
+  thinkingEl.innerHTML = '<span></span><span></span><span></span>';
+  agentMsg.appendChild(thinkingEl);
+  const traceContainer = document.createElement('div');
+  traceContainer.className = 'pipeline-trace';
+  agentMsg.appendChild(traceContainer);
+  messages.appendChild(agentMsg);
+  messages.scrollTop = messages.scrollHeight;
+
+  // 动画
+  let stepIdx = 0;
+  const stepsToShow = PIPELINE_STEPS;
+  const animInterval = setInterval(() => {
+    if (stepIdx < stepsToShow.length) {
+      renderPipelineTrace(traceContainer, stepsToShow, stepIdx++);
+      messages.scrollTop = messages.scrollHeight;
+    } else {
+      clearInterval(animInterval);
+    }
+  }, 350);
+
+  const t0 = performance.now();
+  try {
+    const res = await authFetch(`${API_BASE}/query`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        query,
+        db_path: document.getElementById('cfgDbPath')?.value?.trim() || null,
+      }),
+    });
+    clearInterval(animInterval);
+    const latency = Math.round(performance.now() - t0);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+
+    renderPipelineTrace(traceContainer, stepsToShow, stepsToShow.length);
+    thinkingEl.remove();
+
+    let content = '';
+    if (data.sql)    content += renderSQL(data.sql);
+    if (data.rows && data.rows.length > 0) {
+      const tableData = data.rows.map(row => {
+        if (Array.isArray(row) && data.columns) {
+          const obj = {};
+          data.columns.forEach((c, i) => obj[c] = row[i]);
+          return obj;
+        }
+        return row;
+      });
+      content += renderTable(tableData);
+    }
+    if (data.answer) content += renderAnswer(data.answer);
+    content += renderMetrics(latency, data.intent, data.tokens);
+    if (data.trace_id) {
+      content += renderFeedback(data.trace_id, query, data.sql, data.answer, data.intent);
+    }
+
+    const bodyEl = document.createElement('div');
+    bodyEl.className = 'msg-body';
+    bodyEl.innerHTML = content;
+    agentMsg.appendChild(bodyEl);
+
+    await addHistoryItem(query, 'ok', agentMsg, {
+      traceId: data.trace_id,
+      sql: data.sql,
+      answer: data.answer,
+      intent: data.intent,
+    });
+  } catch (err) {
+    clearInterval(animInterval);
+    thinkingEl.remove();
+    const bodyEl = document.createElement('div');
+    bodyEl.className = 'msg-body';
+    bodyEl.innerHTML = `<span style="color:var(--err)">重新生成失败：${escapeHtml(String(err))}</span>`;
+    agentMsg.appendChild(bodyEl);
+  }
+  messages.scrollTop = messages.scrollHeight;
 }
 
 /* ─────────────────────────────────────────────
@@ -2619,10 +3079,10 @@ async function sendQuery() {
   const t0 = performance.now();
 
   try {
-    const res = await fetch(`${API_BASE}/query`, {
+    const res = await authFetch(`${API_BASE}/query`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ query: text }),
+      body: JSON.stringify({ query: text, db_path: document.getElementById('cfgDbPath')?.value?.trim() || null }),
     });
 
     clearInterval(animInterval);
@@ -2824,9 +3284,20 @@ window.addEventListener('load', () => {
       ring.style.strokeDashoffset = '16';
     }, 400);
   }
+  // 检查登录态
+  const token = getToken();
+  if (token) {
+    hideLoginOverlay();
+    initApp();
+  } else {
+    showLoginOverlay();
+  }
+});
+
+function initApp() {
   // 恢复历史会话
   restoreSessions();
-});
+}
 
 /* auto-focus input */
 document.getElementById('query-input').focus();

@@ -1,0 +1,107 @@
+<svg xmlns="http://www.w3.org/2000/svg"
+     width="900" height="380"
+     viewBox="0 0 900 380"
+     font-family="Microsoft YaHei, PingFang SC, sans-serif">
+  <defs>
+    <marker id="arrow" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#3A60A0"/>
+    </marker>
+    <marker id="arrowRed" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#C03030"/>
+    </marker>
+    <marker id="arrowGreen" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#3A9A3A"/>
+    </marker>
+    <filter id="s"><feDropShadow dx="1" dy="2" stdDeviation="3" flood-opacity="0.13"/></filter>
+    <linearGradient id="gTitle" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#1A3060"/>
+      <stop offset="100%" style="stop-color:#3A60A0"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="900" height="380" fill="#FAFBFD"/>
+
+  <!-- 标题 -->
+  <rect x="0" y="0" width="900" height="56" fill="url(#gTitle)"/>
+  <text x="450" y="28" text-anchor="middle" fill="white" font-size="17" font-weight="bold">
+    挑战 1 · 反幻觉方案：RAG Schema Linking + PRAGMA 实时校验
+  </text>
+  <text x="450" y="46" text-anchor="middle" fill="#BBD4F0" font-size="11">
+    让 LLM 看见真实表结构，再让数据库给它判一次卷
+  </text>
+
+  <!-- ===== 节点 1：自然语言输入 ===== -->
+  <g filter="url(#s)">
+    <rect x="30" y="110" width="130" height="80" rx="10" fill="#E8F2FF" stroke="#5B8DD9" stroke-width="2"/>
+    <text x="95" y="138" text-anchor="middle" fill="#2B5090" font-size="13" font-weight="bold">自然语言</text>
+    <text x="95" y="158" text-anchor="middle" fill="#5A7AAA" font-size="10">"昨天华东退款率"</text>
+    <text x="95" y="174" text-anchor="middle" fill="#5A7AAA" font-size="10">"对比 GMV 差异"</text>
+  </g>
+
+  <!-- 箭头 1 -->
+  <line x1="160" y1="150" x2="200" y2="150" stroke="#3A60A0" stroke-width="2" marker-end="url(#arrow)"/>
+
+  <!-- ===== 节点 2：Schema 召回 ===== -->
+  <g filter="url(#s)">
+    <rect x="205" y="110" width="140" height="80" rx="10" fill="#F0E8FC" stroke="#9B6DC8" stroke-width="2"/>
+    <text x="275" y="135" text-anchor="middle" fill="#4A2070" font-size="13" font-weight="bold">Schema 召回</text>
+    <text x="275" y="154" text-anchor="middle" fill="#7A4AAA" font-size="10">向量库检索</text>
+    <text x="275" y="170" text-anchor="middle" fill="#7A4AAA" font-size="10">Top-K 相关表/列</text>
+    <text x="275" y="184" text-anchor="middle" fill="#7A4AAA" font-size="9" font-style="italic">RAG</text>
+  </g>
+
+  <!-- 箭头 2 -->
+  <line x1="345" y1="150" x2="385" y2="150" stroke="#3A60A0" stroke-width="2" marker-end="url(#arrow)"/>
+
+  <!-- ===== 节点 3：LLM 生成 SQL ===== -->
+  <g filter="url(#s)">
+    <rect x="390" y="110" width="140" height="80" rx="10" fill="#2D3E56" stroke="#1A2030" stroke-width="2"/>
+    <text x="460" y="135" text-anchor="middle" fill="white" font-size="13" font-weight="bold">LLM 生成 SQL</text>
+    <text x="460" y="154" text-anchor="middle" fill="#AACCFF" font-size="10">基于真实 schema</text>
+    <text x="460" y="170" text-anchor="middle" fill="#AACCFF" font-size="10">不再瞎编表名</text>
+    <text x="460" y="184" text-anchor="middle" fill="#AACCFF" font-size="9" font-style="italic">DeepSeek / GPT</text>
+  </g>
+
+  <!-- 箭头 3 -->
+  <line x1="530" y1="150" x2="570" y2="150" stroke="#3A60A0" stroke-width="2" marker-end="url(#arrow)"/>
+
+  <!-- ===== 节点 4：PRAGMA 校验 ===== -->
+  <g filter="url(#s)">
+    <rect x="575" y="110" width="140" height="80" rx="10" fill="#FFF8E8" stroke="#E08020" stroke-width="2"/>
+    <text x="645" y="135" text-anchor="middle" fill="#7A4000" font-size="13" font-weight="bold">PRAGMA 校验</text>
+    <text x="645" y="154" text-anchor="middle" fill="#AA6020" font-size="10">实时查表结构</text>
+    <text x="645" y="170" text-anchor="middle" fill="#AA6020" font-size="10">列存不存在?</text>
+    <text x="645" y="184" text-anchor="middle" fill="#AA6020" font-size="9" font-style="italic">数据库兜底</text>
+  </g>
+
+  <!-- 通过 -->
+  <line x1="715" y1="140" x2="755" y2="140" stroke="#3A9A3A" stroke-width="2.5" marker-end="url(#arrowGreen)"/>
+  <text x="735" y="132" text-anchor="middle" fill="#1A5A1A" font-size="10" font-weight="bold">通过</text>
+
+  <g filter="url(#s)">
+    <rect x="760" y="110" width="120" height="60" rx="10" fill="#E8F8E8" stroke="#3A9A3A" stroke-width="2"/>
+    <text x="820" y="135" text-anchor="middle" fill="#1A5A1A" font-size="13" font-weight="bold">✓ 执行</text>
+    <text x="820" y="155" text-anchor="middle" fill="#5A9A5A" font-size="10">只读 SELECT</text>
+  </g>
+
+  <!-- 不通过 - 反馈循环 -->
+  <line x1="645" y1="190" x2="645" y2="240" stroke="#C03030" stroke-width="2"/>
+  <line x1="645" y1="240" x2="460" y2="240" stroke="#C03030" stroke-width="2"/>
+  <line x1="460" y1="240" x2="460" y2="190" stroke="#C03030" stroke-width="2.5" marker-end="url(#arrowRed)"/>
+  <text x="555" y="234" text-anchor="middle" fill="#B03030" font-size="11" font-weight="bold">✗ 不通过 → 错误反馈，重新生成</text>
+
+  <!-- ===== 底部对比说明 ===== -->
+  <rect x="30" y="280" width="840" height="80" fill="#FFFFFF" stroke="#DDD" stroke-width="1" rx="8"/>
+
+  <rect x="30" y="280" width="420" height="80" fill="#FFEBEE" stroke="#C03030" stroke-width="1" rx="8"/>
+  <text x="240" y="302" text-anchor="middle" fill="#B03030" font-size="12" font-weight="bold">❌ 没有 Schema Linking 时</text>
+  <text x="240" y="322" text-anchor="middle" fill="#C06060" font-size="10">LLM 凭"推测"瞎编：SELECT * FROM orders_main</text>
+  <text x="240" y="338" text-anchor="middle" fill="#C06060" font-size="10">→ 表根本不存在 → 用户骂街</text>
+  <text x="240" y="354" text-anchor="middle" fill="#7A0000" font-size="10" font-weight="bold">一次成功率 &lt; 60%</text>
+
+  <rect x="450" y="280" width="420" height="80" fill="#E8F8E8" stroke="#3A9A3A" stroke-width="1" rx="8"/>
+  <text x="660" y="302" text-anchor="middle" fill="#1A5A1A" font-size="12" font-weight="bold">✅ 加上 RAG + PRAGMA 之后</text>
+  <text x="660" y="322" text-anchor="middle" fill="#5A9A5A" font-size="10">LLM 看到真实 schema 才动笔，数据库再判一次卷</text>
+  <text x="660" y="338" text-anchor="middle" fill="#5A9A5A" font-size="10">幻觉表名 / 幻觉列名 直接被拦截</text>
+  <text x="660" y="354" text-anchor="middle" fill="#1A5A1A" font-size="10" font-weight="bold">端到端成功率 90%+</text>
+</svg>

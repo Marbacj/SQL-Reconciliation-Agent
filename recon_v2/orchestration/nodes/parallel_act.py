@@ -223,6 +223,8 @@ def parallel_act_node(state: GraphState) -> GraphState:
             "alias": alias,
             "success": r.get("success", False),
             "sql": r.get("sql", ""),
+            "rows": r.get("rows", []),
+            "columns": r.get("columns", []),
             "row_count": len(r.get("rows", [])),
             "error": r.get("error", ""),
         }
