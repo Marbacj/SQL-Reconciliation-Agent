@@ -20,7 +20,7 @@ try:
     from fastapi.middleware.cors import CORSMiddleware
     from fastapi.responses import FileResponse, JSONResponse, PlainTextResponse
     from fastapi.staticfiles import StaticFiles
-    from pydantic import BaseModel
+    from pydantic import BaseModel, Field
 
     _HAS_FASTAPI = True
 except ImportError:
@@ -104,6 +104,7 @@ class QueryRequest(BaseModel):
     query: str
     db_path: Optional[str] = None
     thread_id: Optional[str] = None
+    datasource: Optional[str] = None  # 数据源名称，优先于 db_path
 
 
 class LoginRequest(BaseModel):
@@ -284,9 +285,34 @@ def _build_app():
 
     @app.post("/query")
     def query(req: QueryRequest, tenant: TenantInfo = Depends(_get_tenant)):
-        target_db = req.db_path or db_path
+        # ── 数据源解析：datasource name > db_path > 默认 db ──
+        from recon_v2.adapters import DataSourceRegistry, build_adapter
+        from recon_v2.adapters.sqlite_adapter import SQLiteAdapter
+        from recon_v2.tools.sql_runner import SQLRunnerTool
+
+        _registry = DataSourceRegistry.get_instance()
+        _adapter = None
+        target_db = db_path  # fallback
+
+        if req.datasource:
+            try:
+                _adapter = _registry.get_adapter(req.datasource)
+                # db_path 仅用于 schema_indexer，datasource 模式保留默认值
+                target_db = db_path
+            except (KeyError, ValueError) as e:
+                raise HTTPException(status_code=404, detail=str(e))
+        elif req.db_path:
+            target_db = req.db_path
+
         ctx = AgentContext(query=req.query, db_path=target_db)
-        ctx.tools = build_default_registry(target_db)
+        # 若指定了外部 adapter，覆盖默认 sql_runner
+        if _adapter:
+            _runner = SQLRunnerTool(adapter=_adapter)
+            default_registry = build_default_registry(target_db)
+            default_registry.register(_runner)
+            ctx.tools = default_registry
+        else:
+            ctx.tools = build_default_registry(target_db)
         ctx.memory = memory
         ctx.rag = retriever
         # ── 注入租户 LLM 配置（优先租户自定义，fallback 到 env）──
@@ -330,6 +356,81 @@ def _build_app():
         finally:
             ctx_registry.remove(ctx.trace_id)
 
+
+    # ── 数据源管理接口 ──────────────────────────────────────────────────────
+
+    from recon_v2.adapters import DataSourceConfig, DataSourceRegistry, build_adapter
+
+    class DataSourceCreateRequest(BaseModel):
+        name: str = Field(..., description="数据源唯一名称，如 prod_mysql")
+        type: str = Field(..., description="sqlite | mysql | postgres")
+        db_path: Optional[str] = Field(None, description="SQLite 文件路径")
+        host: Optional[str] = None
+        port: Optional[int] = None
+        user: Optional[str] = None
+        password: Optional[str] = None
+        database: Optional[str] = None
+        schema_name: Optional[str] = Field(None, description="PostgreSQL schema，默认 public")
+        timeout: float = 10.0
+        charset: Optional[str] = "utf8mb4"
+        description: Optional[str] = None
+
+    @app.get("/datasources", tags=["datasources"])
+    def list_datasources():
+        """列出所有已注册数据源（密码脱敏）。"""
+        registry = DataSourceRegistry.get_instance()
+        return {"datasources": registry.list_all(), "total": len(registry.list_all())}
+
+    @app.post("/datasources", tags=["datasources"])
+    def create_datasource(req: DataSourceCreateRequest):
+        """注册新数据源。"""
+        registry = DataSourceRegistry.get_instance()
+        cfg = DataSourceConfig(
+            type=req.type,
+            db_path=req.db_path,
+            host=req.host,
+            port=req.port,
+            user=req.user,
+            password=req.password,
+            database=req.database,
+            pg_schema=req.schema_name or "public",
+            timeout=req.timeout,
+            charset=req.charset,
+            description=req.description,
+        )
+        try:
+            # 先 ping 验证连通性（SQLite 检查文件是否存在）
+            adapter = build_adapter(cfg)
+            if hasattr(adapter, "ping"):
+                if not adapter.ping():
+                    raise HTTPException(status_code=400, detail="数据源连接测试失败，请检查连接参数")
+            registry.register(req.name, cfg)
+            return {"status": "ok", "name": req.name, "type": req.type}
+        except (ValueError, ImportError) as e:
+            raise HTTPException(status_code=400, detail=str(e))
+
+    @app.delete("/datasources/{name}", tags=["datasources"])
+    def delete_datasource(name: str):
+        """删除已注册数据源。"""
+        registry = DataSourceRegistry.get_instance()
+        if not registry.unregister(name):
+            raise HTTPException(status_code=404, detail=f"数据源 '{name}' 不存在")
+        return {"status": "ok", "name": name}
+
+    @app.post("/datasources/{name}/ping", tags=["datasources"])
+    def ping_datasource(name: str):
+        """测试指定数据源的连通性。"""
+        registry = DataSourceRegistry.get_instance()
+        ok = registry.ping(name)
+        return {"name": name, "reachable": ok}
+
+    @app.patch("/datasources/{name}/enabled", tags=["datasources"])
+    def set_datasource_enabled(name: str, enabled: bool = True):
+        """启用或禁用数据源。"""
+        registry = DataSourceRegistry.get_instance()
+        if not registry.set_enabled(name, enabled):
+            raise HTTPException(status_code=404, detail=f"数据源 '{name}' 不存在")
+        return {"status": "ok", "name": name, "enabled": enabled}
 
     @app.post("/admin/reindex", tags=["admin"])
     def reindex(target_db: Optional[str] = None):

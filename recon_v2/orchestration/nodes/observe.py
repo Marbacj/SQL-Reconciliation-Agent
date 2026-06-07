@@ -9,6 +9,12 @@ Range Guard（业务合理性检查）：
 - 比率类结果不应超过 100%（或 1.0）
 - COUNT 结果不应超过数据库总行数的 10 倍（防幻觉）
 - 空结果 + WHERE 含精确过滤条件 → 发出警告（可能过滤过严）
+
+错误恢复引导（error_diagnosis）：
+- SQL 执行失败时，翻译底层错误为业务语言 + 行动建议
+- 结果为空时，分析过滤条件、推断原因
+- 重试耗尽时，提供上下文齐全的引导信息
+- 安全拒绝时，给出友好解释和正确做法
 """
 
 from __future__ import annotations
@@ -20,6 +26,12 @@ from typing import Any, Dict, List, Optional, Tuple
 from recon_v2.infra.tracing import span
 from recon_v2.orchestration.ctx_registry import get as get_ctx
 from recon_v2.orchestration.state import GraphState
+from recon_v2.orchestration.nodes.error_diagnosis import (
+    diagnose_error,
+    diagnose_empty_result,
+    build_retry_exhausted_message,
+    build_rejected_message,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -705,12 +717,28 @@ def _format_rows(rows: list, columns: list, max_rows: int = 20) -> str:
     return "\n".join(lines)
 
 
+# ── 已知表名获取（用于错误诊断中的相似匹配）───────────────────────
+
+def _get_known_tables(ctx) -> List[str]:
+    """从 schema_info 缓存或 SQL 中提取已知表名列表。"""
+    try:
+        schema_info = getattr(ctx, "_schema_info", None)
+        if schema_info and schema_info.tables:
+            return [t.name for t in schema_info.tables]
+    except Exception:
+        pass
+    return []
+
+
 # ── observe_node ─────────────────────────────────────────────────────
 
 def observe_node(state: GraphState) -> dict:
     ctx = get_ctx(state["ctx_id"])
     observations = state.get("observations", [])
     tool_calls = state.get("tool_calls", [])
+    query = getattr(ctx, "query", "") or state.get("query", "")
+    retry_count = state.get("retry_count", 0)
+    max_retries = 3  # 与 act.py 中的 MAX_SQL_RETRIES 保持一致
 
     with span("observe"):
         if not observations:
@@ -737,58 +765,116 @@ def observe_node(state: GraphState) -> dict:
             sqls = [_format_sql(r.get("sql", "")) for r in parallel_results.values() if r.get("sql")]
             sql = "\n\n".join(sqls) if sqls else ""
 
-        # 构造 answer
-        summary = _summarize_observations(observations, state=state)
+        # ── Budget exceeded ─────────────────────────────────────────
+        if ctx.budget.exceeded():
+            ctx.step()
+            return {
+                "sql": sql,
+                "answer": (
+                    "⚠️ 本次查询消耗的 Token 已超出预算上限\n\n"
+                    "**建议：**\n"
+                    "- 简化查询，减少需要分析的表或条件\n"
+                    "- 把复合问题拆成多个小问题分步查询\n"
+                    f"\n*详情：{ctx.budget.reason()}*"
+                ),
+                "final_status": "budget_exceeded",
+            }
+
+        # ── 成功路径 ─────────────────────────────────────────────────
         if last_obs.get("success"):
+            summary = _summarize_observations(observations, state=state)
             answer = summary
             status = "ok"
 
             # ── Range Guard：业务合理性检查 ──
             rows = last_obs.get("rows", [])
             row_count = last_obs.get("row_count", 0)
-            query = getattr(ctx, "query", "") or state.get("query", "")
             guard_warnings = _check_range_guard(query, sql, rows, row_count)
+
+            # ── 空结果增强诊断 ──
+            if not rows and last_call.get("name") == "sql_runner":
+                empty_diag = diagnose_empty_result(sql=sql, query=query)
+                answer = f"{summary}\n\n{empty_diag}"
+                logger.info("observe: empty result detected for query=%r", query[:60])
+                # 空结果仍是 "ok" 状态（SQL 成功执行），不改变 status
 
             if guard_warnings:
                 warning_text = "\n".join(guard_warnings)
-                answer = f"{summary}\n\n【数据校验提示】\n{warning_text}"
+                answer = f"{answer}\n\n【数据校验提示】\n{warning_text}"
                 logger.info(
                     "observe: range guard triggered for query=%r: %s",
                     query[:60],
                     guard_warnings,
                 )
-                # 仅警告，不改变 status（不阻断结果）
-                # 若警告条目超过 2 个则标记为 needs_review，供用户确认
                 if len(guard_warnings) >= 2:
                     status = "needs_review"
 
+        # ── 失败路径 ─────────────────────────────────────────────────
         else:
-            answer = summary
-            status = "error"
+            error_msg = last_obs.get("error", "未知错误")
+            known_tables = _get_known_tables(ctx)
+            obs_count = len(observations)
 
-        # Budget exceeded
-        if ctx.budget.exceeded():
-            return {
-                "sql": sql,
-                "answer": f"budget exceeded: {ctx.budget.reason()}",
-                "final_status": "budget_exceeded",
-            }
+            # 收集所有尝试过的 SQL（用于重试耗尽时的历史展示）
+            attempted_sqls = []
+            for tc in tool_calls:
+                if tc.get("name") == "sql_runner":
+                    attempted_sqls.append(tc.get("args", {}).get("sql", ""))
+            attempted_sqls = [s for s in attempted_sqls if s]
+
+            # 判断是否重试耗尽
+            is_retry_exhausted = retry_count >= max_retries or obs_count >= MAX_ACT_ITER
+
+            if is_retry_exhausted and attempted_sqls:
+                # 重试耗尽：给出完整的引导信息
+                answer = build_retry_exhausted_message(
+                    query=query,
+                    attempted_sqls=attempted_sqls,
+                    last_error=error_msg,
+                    known_tables=known_tables,
+                )
+                logger.info(
+                    "observe: retry exhausted (retry_count=%d) for query=%r, error=%r",
+                    retry_count, query[:60], error_msg[:80],
+                )
+            else:
+                # 单次失败：翻译错误为业务语言
+                answer = diagnose_error(
+                    error_msg=error_msg,
+                    sql=sql,
+                    query=query,
+                    known_tables=known_tables,
+                    retry_count=retry_count,
+                    max_retries=max_retries,
+                )
+                logger.info(
+                    "observe: SQL error diagnosed for query=%r: %r",
+                    query[:60], error_msg[:80],
+                )
+
+            status = "error"
 
         ctx.step()
         return {
             "sql": sql,
             "answer": answer,
             "final_status": status,
+            # 新增：把原始错误也带回，方便 reflect/前端使用
+            "error": last_obs.get("error") if not last_obs.get("success") else None,
         }
 
+
+# ── observe_decide ────────────────────────────────────────────────────
 
 def observe_decide(state: GraphState) -> str:
     """conditional edge：observe 完了去 reflect (终止) 还是再 act (继续)。"""
     status = state.get("final_status", "")
     step = state.get("step_counter", 0)
     obs_count = len(state.get("observations", []))
+    retry_count = state.get("retry_count", 0)
+    max_retries = 3
 
-    # 出现 error / budget / clarify / rejected → 终止
+    # Budget 超限 / 安全拒绝 / 待澄清 → 直接终止
     if status in {"budget_exceeded", "rejected", "clarify"}:
         return "reflect"
 
@@ -796,9 +882,13 @@ def observe_decide(state: GraphState) -> str:
     if status == "needs_review":
         return "reflect"
 
-    # 工具失败 → 再试一次（最多 1 次）
-    last = state.get("observations", [])
-    if last and not last[-1].get("success") and obs_count < 2:
+    # 工具失败 → 判断是否还有重试机会
+    last_obs_list = state.get("observations", [])
+    if last_obs_list and not last_obs_list[-1].get("success"):
+        # 重试耗尽 → 终止（answer 中已有引导信息）
+        if retry_count >= max_retries or obs_count >= MAX_ACT_ITER:
+            return "reflect"
+        # 还有重试机会 → 继续 act
         return "act"
 
     # 默认成功 → 反思终止

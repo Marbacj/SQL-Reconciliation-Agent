@@ -33,6 +33,10 @@ _VALID_INTENTS = {
     "time_window_recon",
     "numeric_diff",
     "boundary_edge",
+    # ── 通用查询意图扩展 ──
+    "trend_analysis",      # 趋势分析：按时间聚合折线/柱状数据
+    "period_comparison",   # 同环比：两段时期数值对比，输出增长率
+    "topn_ranking",        # TopN 排行：输出带序号的排行榜报告
 }
 
 # KNN 自动启用所需的最小样本数
@@ -203,28 +207,54 @@ _INTENT_DEFINITIONS = """You classify a natural language SQL reconciliation quer
 - time_window_recon: Reconcile data across time windows — find missing/extra records between two datasets.
 - numeric_diff    : Compute numeric differences/ratios between columns from two tables (金额差, 退款率 vs 支付率).
 - boundary_edge   : ONLY for DDL/DML (DROP/DELETE/UPDATE/INSERT), SQL injection, or completely off-topic.
+- trend_analysis  : Time-series aggregation to show how a metric changes over time (按天/周/月看走势/趋势/变化).
+                    Key signals: "走势", "趋势", "变化", "每天", "按月", "折线", "增长曲线".
+- period_comparison: Compare the SAME metric between two specific time periods and compute growth rate (+/-%).
+                    Key signals: "同比", "环比", "上月", "上周", "去年", "上个季度", "涨了多少", "增长率".
+                    CRITICAL: period_comparison requires explicit two-period comparison + growth rate output.
+                    Do NOT confuse with time_window_recon (recon = find missing/extra rows, NOT growth rate).
+- topn_ranking    : Rank entities by a metric and return Top-N results with rank numbers and formatted report.
+                    Key signals: "排行", "排名", "前N", "Top", "最高的N个", "最多的", "榜单".
 
 Key rules:
 - "已支付没有退款" / "找出未退款" / "没有对应退款" → simple_query (NOT EXISTS / LEFT JOIN IS NULL)
 - "订单金额和退款金额是否一致" / "差额是多少" → numeric_diff
-- "对比两个时间段数据" / "昨天和今天差异" → time_window_recon
+- "对比两个时间段数据" / "昨天和今天差异" → time_window_recon (NOT period_comparison — no growth rate needed)
 - "每个用户的订单和支付记录" → multi_table_join
+- "最近30天GMV走势" / "每天的支付笔数" → trend_analysis
+- "本月GMV比上月增长多少" / "今年Q1同比去年" → period_comparison
+- "GMV最高的10个直播间" / "退款率前5的商品" → topn_ranking
 - NULL checks, future date queries, edge case data → simple_query (valid SQL queries)
 """
 
 _STATIC_FEW_SHOTS = [
-    ("找出已支付但没有退款的订单",        "simple_query"),
-    ("哪些订单没有对应的退款记录",         "simple_query"),
-    ("订单表和退款表金额是否一致",         "numeric_diff"),
-    ("退款金额比订单金额少多少",           "numeric_diff"),
-    ("昨天的 GMV 和支付系统数据对得上吗", "time_window_recon"),
-    ("每个用户的总订单金额",               "simple_query"),
-    ("统计今天的退款笔数",                 "simple_query"),
-    ("对比本月和上月的支付差异",           "time_window_recon"),
-    ("每个渠道的成功率和退款率",           "numeric_diff"),
-    ("查出 user_id 为 null 的订单",        "simple_query"),
-    ("删除所有订单",                       "boundary_edge"),
-    ("今天有什么菜",                       "boundary_edge"),
+    ("找出已支付但没有退款的订单",              "simple_query"),
+    ("哪些订单没有对应的退款记录",               "simple_query"),
+    ("订单表和退款表金额是否一致",               "numeric_diff"),
+    ("退款金额比订单金额少多少",                 "numeric_diff"),
+    ("昨天的 GMV 和支付系统数据对得上吗",       "time_window_recon"),
+    ("每个用户的总订单金额",                     "simple_query"),
+    ("统计今天的退款笔数",                       "simple_query"),
+    ("对比本月和上月的支付差异",                 "time_window_recon"),
+    ("每个渠道的成功率和退款率",                 "numeric_diff"),
+    ("查出 user_id 为 null 的订单",              "simple_query"),
+    ("删除所有订单",                             "boundary_edge"),
+    ("今天有什么菜",                             "boundary_edge"),
+    # ── trend_analysis ──
+    ("最近30天每天的GMV走势",                   "trend_analysis"),
+    ("按月统计过去半年的支付笔数变化",           "trend_analysis"),
+    ("每周的退款率趋势",                         "trend_analysis"),
+    ("今年各月订单金额折线图",                   "trend_analysis"),
+    # ── period_comparison ──
+    ("本月GMV比上月增长了多少",                 "period_comparison"),
+    ("今年Q1和去年Q1的订单数同比变化",          "period_comparison"),
+    ("本周退款率比上周高还是低",                "period_comparison"),
+    ("11月支付金额环比10月增长率是多少",        "period_comparison"),
+    # ── topn_ranking ──
+    ("GMV最高的10个直播间排行榜",               "topn_ranking"),
+    ("退款率最高的前5个商品类目",               "topn_ranking"),
+    ("订单数最多的用户Top10",                   "topn_ranking"),
+    ("销售额排名前3的渠道",                     "topn_ranking"),
 ]
 
 

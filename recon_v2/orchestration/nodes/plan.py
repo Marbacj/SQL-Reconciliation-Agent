@@ -39,10 +39,28 @@ _PLAN_TEMPLATES = {
         "2) 调 diff_calculator 容差比较",
         "3) 调 report_generator 渲染差额列表",
     ],
+    # ── 通用查询意图 ──
+    "trend_analysis": [
+        "1) 调 sql_runner 执行按时间聊合的趋势 SQL（如 GROUP BY strftime('%Y-%m',created_at)）",
+        "2) 调 report_generator 渲染趋势报告（带时间轴和指标序列）",
+    ],
+    "period_comparison": [
+        "1) 调 sql_runner 查询当前周期指标（如本月）",
+        "2) 调 sql_runner 查询对比周期指标（如上月）",
+        "3) 调 growth_rate_calculator 计算增长率（+/-%）",
+        "4) 调 report_generator 渲染同环比报告",
+    ],
+    "topn_ranking": [
+        "1) 调 sql_runner 执行 ORDER BY metric DESC LIMIT N",
+        "2) 调 report_generator 渲染带序号的排行榜报告",
+    ],
 }
 
 # 需要走并行路径的意图集合（plan 节点据此决定是否调 _build_parallel_steps_with_llm）
-_PARALLEL_INTENTS = {"numeric_diff", "time_window_recon", "multi_table_join", "boundary_edge"}
+_PARALLEL_INTENTS = {
+    "numeric_diff", "time_window_recon", "multi_table_join", "boundary_edge",
+    "period_comparison",  # 同环比：当前周期和对比周期各跑一条 SQL，天然并行
+}
 
 
 def _get_schema_info(ctx) -> SchemaInfo:
@@ -149,7 +167,7 @@ def plan_node(state: GraphState) -> dict:
                     logger.debug("[PLAN] LLM refined steps=%s", lines)
 
                 # 对账意图：优先用 ReconPlanner 生成结构化 tables 数组
-                if use_parallel and intent in {"time_window_recon", "numeric_diff", "multi_table_join"}:
+                if use_parallel and intent in {"time_window_recon", "numeric_diff", "multi_table_join", "period_comparison"}:
                     recon_plan = _build_recon_plan_with_llm(
                         intent=intent,
                         query=query,
@@ -566,6 +584,17 @@ def _build_parallel_steps_with_llm(
             "diff_calculator: 分析 parallel_results 中的边界异常",
             "report_generator: 渲染异常报告",
         ],
+        # ── 通用查询意图 ──
+        "period_comparison": [
+            "growth_rate_calculator: 从 parallel_results 取当前/对比周期数值，计算增长率（+/-%）",
+            "report_generator: 渲染同环比报告（含增长率、绝对差值）",
+        ],
+        "trend_analysis": [
+            "report_generator: 渲染趋势报告（时间轴 + 指标序列）",
+        ],
+        "topn_ranking": [
+            "report_generator: 渲染带序号的排行榜报告（Top-N 格式）",
+        ],
     }
     post_steps = _POST_STEPS.get(intent, [
         "diff_calculator: 合并 parallel_results 分析差异",
@@ -576,7 +605,17 @@ def _build_parallel_steps_with_llm(
         f"Query: {query}\nIntent: {intent}\n\n"
         f"{schema_hint}\n\n"
         "SQLite rules: strftime('%Y-%m',col), DATE('now','-N days'), no CURDATE/INTERVAL.\n\n"
-        "分析这个对账/查询任务需要从哪几张表独立查询数据（每张表的查询互相独立，可并发执行）。\n"
+        + (
+            "【period_comparison 专属规则】\n"
+            "- 必须生成 2 条独立 SQL：一条查当前周期，一条查对比周期\n"
+            "- alias 命名：current_period / previous_period\n"
+            "- 每条 SQL 只返回一行汇总数值（如 SUM/COUNT）\n"
+            "- SQL 示例（本月 vs 上月）:\n"
+            "  current:  SELECT SUM(amount) AS value FROM orders WHERE strftime('%Y-%m',created_at)=strftime('%Y-%m','now')\n"
+            "  previous: SELECT SUM(amount) AS value FROM orders WHERE strftime('%Y-%m',created_at)=strftime('%Y-%m','now','-1 month')\n\n"
+            if intent == "period_comparison" else ""
+        )
+        + "分析这个对账/查询任务需要从哪几张表独立查询数据（每张表的查询互相独立，可并发执行）。\n"
         "表的数量由你决定，可以是 2 张也可以是多张。\n"
         "为每张表生成独立的 SQL 查询语句，alias 用表名命名（如 order_result, payment_result）。\n\n"
         "返回 JSON 数组（只返回 JSON，不要其他文字）:\n"
