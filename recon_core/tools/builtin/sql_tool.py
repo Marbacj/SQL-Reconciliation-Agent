@@ -205,3 +205,96 @@ class SQLTool(Tool):
             return f"✅ SQL 语法校验通过。执行计划包含 {len(plan_rows)} 个操作码。"
         except sqlite3.Error as e:
             return f"❌ SQL 语法错误: {str(e)}\n\n请检查并修正 SQL 语句后重试。"
+
+    # ============ 子工具：sql_schema_search ============
+
+    @tool_action("sql_schema_search", "按关键词搜索相关的表和字段（支持逗号分隔多个关键词）")
+    def _search_schema(self, keyword: str) -> str:
+        """在数据库所有表名和字段名中模糊搜索，返回相关表的摘要
+
+        Args:
+            keyword: 搜索关键词，支持逗号分隔多个词（如 "订单,日志" 或 "order"）
+
+        Returns:
+            命中表的字段列表摘要；命中分最高的表额外附带前 3 行示例数据
+        """
+        keywords = [k.strip().lower() for k in keyword.split(",") if k.strip()]
+        if not keywords:
+            return "❌ 请提供搜索关键词"
+
+        try:
+            conn = sqlite3.connect(self.db_path)
+            c = conn.cursor()
+
+            # 获取所有表名
+            c.execute("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name")
+            all_tables = [row[0] for row in c.fetchall()]
+
+            if not all_tables:
+                conn.close()
+                return "❌ 数据库中没有任何表"
+
+            scores: List[tuple] = []  # (score, table_name, columns)
+
+            for table in all_tables:
+                score = 0
+                # 表名匹配（权重更高）
+                for kw in keywords:
+                    if kw in table.lower():
+                        score += 3
+
+                # 字段名匹配
+                c.execute(f"PRAGMA table_info('{table}')")
+                columns = c.fetchall()  # (cid, name, type, notnull, dflt_value, pk)
+                for col in columns:
+                    col_name = col[1].lower()
+                    for kw in keywords:
+                        if kw in col_name:
+                            score += 1
+
+                if score > 0:
+                    scores.append((score, table, columns))
+
+            if not scores:
+                conn.close()
+                return (
+                    f"❌ 未找到与关键词 '{keyword}' 相关的表。\n\n"
+                    f"数据库中共有 {len(all_tables)} 张表：{', '.join(all_tables)}"
+                )
+
+            # 按分数降序排列
+            scores.sort(key=lambda x: x[0], reverse=True)
+
+            result = f"## Schema 搜索结果（关键词: {keyword}）\n\n"
+            result += f"共命中 **{len(scores)}** 张表：\n\n"
+
+            for rank, (score, table, columns) in enumerate(scores):
+                result += f"### {table}（匹配度: {score}）\n\n"
+                result += "| 字段名 | 类型 | 主键 |\n"
+                result += "|--------|------|------|\n"
+                for col in columns:
+                    pk_mark = "✓" if col[5] else ""
+                    result += f"| {col[1]} | {col[2]} | {pk_mark} |\n"
+
+                # 命中分最高的表（rank=0）额外附带示例数据
+                if rank == 0:
+                    try:
+                        c.execute(f"SELECT * FROM '{table}' LIMIT 3")
+                        sample_rows = c.fetchall()
+                        if sample_rows:
+                            col_names = [col[1] for col in columns]
+                            result += "\n**示例数据（前 3 行）**\n\n"
+                            result += "| " + " | ".join(col_names) + " |\n"
+                            result += "|" + "|".join(["---"] * len(col_names)) + "|\n"
+                            for row_data in sample_rows:
+                                result += "| " + " | ".join(str(v) for v in row_data) + " |\n"
+                    except sqlite3.Error:
+                        pass
+
+                result += "\n"
+
+            conn.close()
+            return result
+
+        except sqlite3.Error as e:
+            return f"❌ 数据库错误: {str(e)}"

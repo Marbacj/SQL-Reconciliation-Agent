@@ -270,7 +270,7 @@ def _llm_pick_tool(ctx, query: str, intent: str, plan: List[str], state: Optiona
             ],
             trace_id=ctx.trace_id,
             temperature=0.0,
-            max_tokens=400,
+            max_tokens=600,
         )
         ctx.budget.add_tokens(out.prompt_tokens + out.completion_tokens)
         # 尝试解析 JSON
@@ -282,6 +282,9 @@ def _llm_pick_tool(ctx, query: str, intent: str, plan: List[str], state: Optiona
             args = result.get("args", {})
             if "query" in args and "sql" not in args:
                 args["sql"] = args.pop("query")
+            # 清洗 SQL 字段：剥除 markdown 代码块、多余说明文字、只保留第一条语句
+            if "sql" in args:
+                args["sql"] = _clean_sql(args["sql"])
             result["args"] = args
         return result
     except Exception as e:
@@ -290,6 +293,28 @@ def _llm_pick_tool(ctx, query: str, intent: str, plan: List[str], state: Optiona
 
 
 # ---------------- Act node ----------------
+
+
+def _clean_sql(sql: str) -> str:
+    """清洗 LLM 输出的 SQL 字段，处理常见格式问题：
+    1. 剥除 markdown 代码块（```sql ... ``` 或 ``` ... ```）
+    2. 去掉首尾空白
+    3. 若包含多条以分号分隔的语句，只保留最后一条完整 SELECT/WITH 语句
+       （针对 LLM 有时输出 "-- comment\nSELECT ..." 或拼接多条 SQL 的情况）
+    """
+    # 1) 剥 markdown 代码块
+    sql = re.sub(r"```(?:sql|sqlite)?\s*", "", sql, flags=re.IGNORECASE)
+    sql = sql.replace("```", "").strip()
+
+    # 2) 按分号拆多条语句，取最后一条包含 SELECT/WITH 的语句
+    parts = [p.strip() for p in sql.split(";") if p.strip()]
+    select_parts = [p for p in parts if re.match(r"\s*(SELECT|WITH)\b", p, re.IGNORECASE)]
+    if select_parts:
+        sql = select_parts[-1]
+    elif parts:
+        sql = parts[-1]
+
+    return sql.strip()
 
 
 REACT_MAX_STEPS = 4

@@ -14,3 +14,9 @@ dashscope>=1.14.0
 # ── 认证 ──
 python-jose[cryptography]>=3.3.0
 passlib[bcrypt]>=1.7.4
+
+# ── 多数据源连接器（软依赖，缺少时对应 Adapter 给出友好报错）──
+# MySQL 支持
+pymysql>=1.0.0
+# PostgreSQL 支持
+psycopg2-binary>=2.9.0

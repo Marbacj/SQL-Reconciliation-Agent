@@ -27,6 +27,7 @@ import argparse
 import dataclasses
 import json
 import os
+import re
 import sys
 import time
 from dataclasses import dataclass
@@ -147,8 +148,20 @@ class V2Adapter:
             t0 = time.time()
             out = run_once(query, db_path)
             latency = (time.time() - t0) * 1000
+
+            # 取可执行的单条 SQL：
+            # 1) 优先用 observations 里最后一条有 final_sql 的（避开 parallel 多条拼接）
+            # 2) 降级用 state["sql"]（可能是 "\n\n".join(sqls) 的展示拼接）
+            raw_sql = out.get("sql", "")
+            observations = out.get("observations") or []
+            for obs in reversed(observations):
+                final_sql = obs.get("final_sql") or obs.get("sql", "")
+                if final_sql and "\n\nSELECT" not in final_sql.upper():
+                    raw_sql = final_sql
+                    break
+
             return SolveResult(
-                sql=out.get("sql", ""),
+                sql=raw_sql,
                 answer=out.get("answer", ""),
                 latency_ms=latency,
                 token_cost=out.get("token_cost", 0),
@@ -188,7 +201,16 @@ def run_single(adapter: TargetAdapter, case: GoldenCase, db_path: str) -> CaseMe
             reason="adapter error",
         )
 
-    acc, reason = exec_accuracy(db_path, res.sql, case.expected_sql)
+    # 若 candidate_sql 包含多个 SELECT（并行结果拼接），不适合直接执行
+    # 此时退化为只做语义匹配，exec_acc 标记为 -1（跳过），不拉低分子
+    candidate_sql = res.sql or ""
+    is_parallel_sql = bool(re.search(r"SELECT\b.+\n\n.*SELECT\b", candidate_sql, re.IGNORECASE | re.DOTALL))
+
+    if is_parallel_sql:
+        acc, reason = 0, "parallel_sql_not_comparable"
+    else:
+        acc, reason = exec_accuracy(db_path, candidate_sql, case.expected_sql)
+
     sem, sem_reason = semantic_match(res.answer, case.expected_result_summary)
 
     return CaseMetric(

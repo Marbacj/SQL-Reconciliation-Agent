@@ -1,4 +1,10 @@
-"""sql_runner Tool：调安全护栏 + EXPLAIN + execute。"""
+"""sql_runner Tool：调安全护栏 + EXPLAIN + execute。
+
+多数据源支持说明：
+- dialect="sqlite"  → 执行前做 MySQL→SQLite 方言转换（兼容 LLM 习惯用 MySQL 语法）
+- dialect="mysql"   → 直接执行原生 MySQL SQL，跳过转换
+- dialect="postgres"→ 直接执行原生 PostgreSQL SQL，跳过转换
+"""
 
 from __future__ import annotations
 
@@ -42,8 +48,10 @@ class SQLRunnerTool(ToolBase[SQLRunnerInput, SQLRunnerOutput]):
         self.adapter = adapter
 
     def _run(self, ctx: Any, inp: SQLRunnerInput) -> SQLRunnerOutput:
-        # 1) 安全护栏
-        verdict = is_safe(inp.sql, self.adapter.dialect)
+        dialect = self.adapter.dialect
+
+        # 1) 安全护栏（AST 解析，传入实际 dialect 以正确识别方言关键字）
+        verdict = is_safe(inp.sql, dialect)
         if not verdict.is_safe:
             return SQLRunnerOutput(
                 success=False,
@@ -51,8 +59,12 @@ class SQLRunnerTool(ToolBase[SQLRunnerInput, SQLRunnerOutput]):
                 final_sql=inp.sql,
             )
 
-        # 2) MySQL→SQLite 方言适配（后处理转换层）
-        sql = adapt_mysql_to_sqlite(inp.sql)
+        # 2) 方言适配（仅 SQLite 需要：LLM 倾向于写 MySQL 语法）
+        #    MySQL / PostgreSQL 直接执行原生 SQL，无需转换
+        if dialect == "sqlite":
+            sql = adapt_mysql_to_sqlite(inp.sql)
+        else:
+            sql = inp.sql
 
         # 3) 自动加 LIMIT
         modified = False
@@ -85,5 +97,5 @@ class SQLRunnerTool(ToolBase[SQLRunnerInput, SQLRunnerOutput]):
             row_count=res.row_count,
             final_sql=sql,
             latency_ms=res.latency_ms,
-            metadata={"limit_added": modified},
+            metadata={"limit_added": modified, "dialect": dialect},
         )

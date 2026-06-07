@@ -1,8 +1,8 @@
-"""Tool package：导出 5 个核心工具 + ToolRegistry。"""
+"""Tool package：导出核心工具 + ToolRegistry。"""
 
 from recon_v2.tools.base import ToolBase, ToolInput, ToolOutput
 from recon_v2.tools.case_query import CaseQueryTool
-from recon_v2.tools.diff_calculator import DiffCalculatorTool
+from recon_v2.tools.diff_calculator import DiffCalculatorTool, GrowthRateCalculatorTool
 from recon_v2.tools.rag_searcher import RagSearcherTool
 from recon_v2.tools.registry import ToolRegistry
 from recon_v2.tools.report_generator import ReportGeneratorTool
@@ -15,6 +15,7 @@ __all__ = [
     "ToolRegistry",
     "SQLRunnerTool",
     "DiffCalculatorTool",
+    "GrowthRateCalculatorTool",
     "ReportGeneratorTool",
     "RagSearcherTool",
     "CaseQueryTool",
@@ -27,6 +28,7 @@ def build_default_registry(db_path: str) -> ToolRegistry:
     reg = ToolRegistry()
     reg.register(SQLRunnerTool(db_path=db_path))
     reg.register(DiffCalculatorTool())
+    reg.register(GrowthRateCalculatorTool())
     reg.register(ReportGeneratorTool())
     reg.register(RagSearcherTool())
     reg.register(CaseQueryTool())

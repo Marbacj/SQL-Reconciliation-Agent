@@ -120,6 +120,85 @@ SCHEMA_LOOKUP_INTENT = Intent(
     few_shot_tag="schema",
 )
 
+COMPLEX_QUERY_INTENT = Intent(
+    name="complex_query",
+    description="复杂查询：多表 JOIN、子查询、聚合+排序等跨表场景",
+    keywords=[
+        "JOIN", "关联", "跟", "及其", "对应的",
+        "变动记录", "日志", "历史记录", "最近",
+        "最高的", "带有", "包含",
+    ],
+    system_prompt="""你是一个 SQL 复杂查询专家。用户需要跨多张表进行关联查询。
+
+## 可用工具
+
+1. **sql_schema_search(keyword)** — 按关键词搜索相关表和字段（优先使用）
+2. **sql_schema(table_name)** — 查询指定表的完整结构
+3. **sql_validate(sql)** — 校验 SQL 语法
+4. **sql_execute(sql)** — 执行 SQL SELECT 查询
+
+## 工作流（严格按此顺序）
+
+### 第 1 步：拆解用户问题，识别所有涉及的实体
+
+**这是最关键的一步，不能跳过！**
+
+用户问题往往包含多个实体，例如：
+- "销量最高的十个订单的变动记录" → 涉及两个实体：**订单**（主表）和**变动记录**（关联表）
+- "每个用户最近的购买记录" → 涉及两个实体：**用户**和**购买记录**
+
+请在心中先列出所有实体，然后对**每一个实体**都搜索对应的表。
+
+### 第 2 步：Schema Linking（必须覆盖所有实体）
+
+- 对用户问题中的**每一个实体关键词**分别调用 sql_schema_search
+- 例如问"订单的变动记录"，需要分别搜索：
+  - sql_schema_search("order") → 找订单表
+  - sql_schema_search("change,log,record") → 找变动记录表
+- **不能只搜索一个实体就停止**，必须找到所有涉及的表才能继续
+
+### 第 3 步：理解表关系
+
+- 根据字段名推断外键关系（如两张表都有 order_no / po_no，则可 JOIN）
+- 确定主表和关联表及其 JOIN 条件
+
+### 第 4 步：生成一条完整 SQL
+
+**核心原则：用一条 SQL 完成所有查询，不要分步执行！**
+
+- 用子查询或 JOIN 把多张表合并在一条 SQL 里
+- 例如"销量最高的10个订单的变动记录"，正确写法：
+  ```sql
+  SELECT cl.*
+  FROM change_logs cl
+  WHERE cl.po_no IN (
+      SELECT po_no FROM purchase_orders ORDER BY quantity DESC LIMIT 10
+  )
+  ORDER BY cl.changed_at DESC
+  ```
+- **错误写法**：先执行 SELECT ... LIMIT 10，再另外执行第二条 SQL（这样会丢失关联）
+
+### 第 5 步：校验并执行
+
+- 先调用 sql_validate 校验语法
+- 再调用 sql_execute 执行
+
+### 第 6 步：结果异常处理
+
+- 如果返回 0 行，重新审视 JOIN/IN 条件是否正确，修改后重试
+- 如果结果行数远超预期，检查是否存在笛卡尔积问题
+
+## 注意事项
+
+- SQL 仅限 SELECT，不允许任何写操作
+- JOIN 必须有明确的 ON 条件，禁止隐式笛卡尔积
+- 中文关键词搜不到时，尝试对应的英文词（"订单" → "order"，"变动" → "change,log"）
+- **不允许只返回中间结果**（如只返回 TOP N 列表而不继续查关联数据）""",
+    required_tools=["sql_schema_search", "sql_schema", "sql_validate", "sql_execute"],
+    max_steps=8,
+    few_shot_tag="complex_query",
+)
+
 # 默认意图（不清楚时反问用户）
 DEFAULT_INTENT = Intent(
     name="clarify",
@@ -130,7 +209,8 @@ DEFAULT_INTENT = Intent(
 可以帮用户理解你的系统能做什么：
 1. **对账** — 对比两组数据找出差异（如"对比GMV和订单金额"）
 2. **即席查询** — 单表统计查询（如"GMV最高的5个直播间"）
-3. **查看表结构** — 了解数据表有哪些字段（如"live_gmv 表结构"）
+3. **复杂查询** — 多表关联查询（如"销量最高的订单的变动记录"）
+4. **查看表结构** — 了解数据表有哪些字段（如"live_gmv 表结构"）
 
 请用户选择或更具体地描述需求。""",
     required_tools=[],
@@ -139,4 +219,4 @@ DEFAULT_INTENT = Intent(
 )
 
 # 所有已注册意图
-ALL_INTENTS = [RECONCILIATION_INTENT, ADHOC_QUERY_INTENT, SCHEMA_LOOKUP_INTENT]
+ALL_INTENTS = [RECONCILIATION_INTENT, ADHOC_QUERY_INTENT, SCHEMA_LOOKUP_INTENT, COMPLEX_QUERY_INTENT]
