@@ -348,6 +348,86 @@ def _build_app():
         except Exception as e:
             raise HTTPException(status_code=500, detail=str(e))
 
+    # ── Schema 预览 + 用户标注 ──────────────────────────────────────────────
+
+    from recon_v2.rag.schema_indexer import get_annotations, set_annotation
+
+    @app.get("/schema/preview", tags=["schema"])
+    def schema_preview():
+        """返回所有表的向量化文本（doc_text）及用户补注，供前端展示和标注。
+
+        响应格式：
+        {
+          "tables": [
+            {
+              "table_name": "orders",
+              "doc_text": "orders order id user id amount status 金额 gmv 流水",
+              "user_note": "订单主表，记录每笔交易的状态和金额"  // 可为空字符串
+            },
+            ...
+          ],
+          "total": 5,
+          "index_ready": true
+        }
+        """
+        from recon_v2.rag.schema_indexer import get_default_linker as _get_linker
+        try:
+            linker = _get_linker(db_path=db_path, auto_build=False)
+            annotations = get_annotations()
+            if not linker.indexer.is_ready():
+                return {"tables": [], "total": 0, "index_ready": False}
+            tables = [
+                {
+                    "table_name": e.table_name,
+                    "doc_text": e.doc_text,
+                    "user_note": annotations.get(e.table_name, ""),
+                    "columns": e.column_names,
+                }
+                for e in linker.indexer.index.entries
+            ]
+            return {"tables": tables, "total": len(tables), "index_ready": True}
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=str(e))
+
+    class AnnotationRequest(BaseModel):
+        table_name: str
+        user_note: str  # 空字符串表示清除该表注释
+
+    @app.patch("/schema/annotation", tags=["schema"])
+    def update_annotation(req: AnnotationRequest):
+        """保存或清除单张表的用户中文补注。
+
+        - user_note 非空 → 保存注释
+        - user_note 为空 → 清除注释
+        注释在下次 rebuild_index 时生效（注入向量文本）。
+        """
+        try:
+            set_annotation(req.table_name, req.user_note)
+            return {
+                "status": "ok",
+                "table_name": req.table_name,
+                "user_note": req.user_note,
+                "message": "注释已保存，重建索引后生效" if req.user_note.strip() else "注释已清除",
+            }
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=str(e))
+
+    @app.post("/schema/annotation/reindex", tags=["schema"])
+    def annotation_reindex():
+        """保存注释后立即触发索引重建（一键应用注释）。"""
+        try:
+            t0 = time.time()
+            idx = rebuild_index(db_path=db_path)
+            elapsed = (time.time() - t0) * 1000
+            return {
+                "status": "ok",
+                "tables": len(idx.entries),
+                "elapsed_ms": round(elapsed, 1),
+                "message": f"索引已重建，{len(idx.entries)} 张表的向量已更新",
+            }
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=str(e))
+
     # ── 用户反馈接口 ────────────────────────────────────────────────
 
     class FeedbackRequest(BaseModel):

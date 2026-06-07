@@ -73,7 +73,7 @@ class DiffCalculatorTool(ToolBase[DiffInput, DiffOutput]):
                 if not _values_match(lrow.get(col), rrow.get(col), inp.abs_tolerance):
                     mismatches[col] = {"left": lrow.get(col), "right": rrow.get(col)}
             if mismatches:
-                mismatch.append({"key": dict(zip(inp.key_columns, k)), "fields": mismatches})
+                mismatch.append({"key": dict[str, Any](zip(inp.key_columns, k)), "fields": mismatches})
             else:
                 matched += 1
 

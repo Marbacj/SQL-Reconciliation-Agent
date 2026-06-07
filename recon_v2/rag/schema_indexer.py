@@ -5,7 +5,7 @@
 离线（定时任务 / 启动时）：
     1. SchemaInspector.inspect() → SchemaInfo（所有表结构）
     2. 每张表拼接文档文本（表名 + 描述 + 字段名 + 枚举值）
-    3. Bag-of-tokens 向量化（与 retriever._tokenize 共用，无需额外依赖）
+    3. Dense embedding 向量化（Dashscope text-embedding-v3）
     4. 写入向量存储（Milvus 或 本地 JSON 降级）
 
 在线（每次查询 act 节点）：
@@ -16,12 +16,13 @@
     "milvus"  : 使用 Milvus（需安装 pymilvus，支持本地 Lite 和远程集群）
     "json"    : 本地 JSON 文件降级（默认，无需额外依赖）
 
-生产升级路径：
-    - 设置 SCHEMA_STORE=milvus + MILVUS_URI=http://milvus-server:19530
-    - 将 Bag-of-tokens embedding 替换为 sentence-transformers dense embedding
-    - 文档文本加入资产平台的业务注释，提升召回率
+Embedding 后端（EMBED_BACKEND 环境变量）：
+    "dashscope"     : Dashscope text-embedding-v3（默认，需 DASHSCOPE_API_KEY）
+    "bag_of_tokens" : 稀疏 Bag-of-tokens 降级（无需额外依赖）
 
 配置：
+    EMBED_BACKEND      : embedding 后端，"dashscope" 或 "bag_of_tokens"（默认 "dashscope"）
+    DASHSCOPE_API_KEY  : 阿里云 Dashscope API Key
     SCHEMA_STORE       : 存储后端，"milvus" 或 "json"（默认 "json"）
     SCHEMA_INDEX_PATH  : JSON 模式的落盘路径（默认 data/schema_index.json）
     SCHEMA_TOP_K       : 检索返回的最大候选表数（默认 5）
@@ -40,6 +41,8 @@ import time
 from dataclasses import asdict, dataclass, field
 from typing import Any, Dict, List, Optional, Tuple
 
+import numpy as np
+
 from recon_v2.rag.retriever import _tokenize
 from recon_v2.tools.schema_inspector import SchemaInfo, TableInfo, inspect as inspect_schema
 
@@ -50,12 +53,73 @@ _DEFAULT_INDEX_PATH = os.getenv("SCHEMA_INDEX_PATH", "data/schema_index.json")
 _DEFAULT_TOP_K = int(os.getenv("SCHEMA_TOP_K", "5"))
 _DEFAULT_MIN_SCORE = float(os.getenv("SCHEMA_MIN_SCORE", "0.05"))
 _SCHEMA_STORE = os.getenv("SCHEMA_STORE", "json").lower()  # "milvus" 或 "json"
+_EMBED_BACKEND = os.getenv("EMBED_BACKEND", "dashscope").lower()  # "dashscope" 或 "bag_of_tokens"
+_ANNOTATIONS_PATH = os.getenv("SCHEMA_ANNOTATIONS_PATH", "data/schema_annotations.json")
 
 
-# ── 向量工具（与 memory/store.py 共用逻辑）──────────────
+# ── 用户注释持久化 ────────────────────────────────────
+def _load_annotations(path: str = _ANNOTATIONS_PATH) -> Dict[str, str]:
+    """加载用户对各表的中文补注 {table_name: user_note}。"""
+    if not os.path.exists(path):
+        return {}
+    try:
+        with open(path, encoding="utf-8") as f:
+            return json.load(f)
+    except Exception as e:
+        logger.warning("schema_annotations: load failed: %s", e)
+        return {}
 
-def _embed(text: str) -> Dict[str, float]:
-    """Bag-of-tokens 归一化向量（可替换为 dense embedding）。"""
+
+def _save_annotations(annotations: Dict[str, str], path: str = _ANNOTATIONS_PATH) -> None:
+    """保存用户注释到 JSON 文件。"""
+    os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(annotations, f, ensure_ascii=False, indent=2)
+    logger.info("schema_annotations: saved %d entries to %s", len(annotations), path)
+
+
+def get_annotations() -> Dict[str, str]:
+    """公开接口：获取所有用户注释（供 API 层调用）。"""
+    return _load_annotations()
+
+
+def set_annotation(table_name: str, note: str) -> None:
+    """公开接口：设置单张表的用户注释（供 API 层调用）。"""
+    annotations = _load_annotations()
+    if note.strip():
+        annotations[table_name] = note.strip()
+    else:
+        annotations.pop(table_name, None)
+    _save_annotations(annotations)
+
+
+# ── Dense Embedding（Dashscope text-embedding-v3）──────
+_embed_cache: Dict[str, List[float]] = {}
+
+
+def _embed_dashscope(text: str) -> List[float]:
+    """调用 Dashscope text-embedding-v3，带本地内存缓存。"""
+    if text in _embed_cache:
+        return _embed_cache[text]
+    try:
+        import dashscope
+        from dashscope import TextEmbedding
+        api_key = os.getenv("DASHSCOPE_API_KEY", "")
+        resp = TextEmbedding.call(
+            model=TextEmbedding.Models.text_embedding_v3,
+            input=text,
+            api_key=api_key,
+        )
+        vec: List[float] = resp.output["embeddings"][0]["embedding"]
+        _embed_cache[text] = vec
+        return vec
+    except Exception as e:
+        logger.warning("Dashscope embedding 失败，降级到 bag_of_tokens: %s", e)
+        return []
+
+
+def _embed_bag_of_tokens(text: str) -> Dict[str, float]:
+    """Bag-of-tokens 归一化向量（降级方案）。"""
     tokens = _tokenize(text)
     if not tokens:
         return {}
@@ -66,11 +130,31 @@ def _embed(text: str) -> Dict[str, float]:
     return {k: v / norm for k, v in cnt.items()} if norm > 0 else {}
 
 
-def _cosine(a: Dict[str, float], b: Dict[str, float]) -> float:
+def _embed(text: str):
+    """统一 embedding 入口，根据 EMBED_BACKEND 环境变量路由。"""
+    if _EMBED_BACKEND == "dashscope":
+        result = _embed_dashscope(text)
+        if result:
+            return result
+        # 降级
+        return _embed_bag_of_tokens(text)
+    return _embed_bag_of_tokens(text)
+
+
+def _cosine(a, b) -> float:
+    """兼容 dense list 和稀疏 dict 两种格式的 cosine 相似度。"""
     if not a or not b:
         return 0.0
-    keys = set(a.keys()) & set(b.keys())
-    return sum(a[k] * b[k] for k in keys)
+    # dense: list of float
+    if isinstance(a, list) and isinstance(b, list):
+        va, vb = np.array(a, dtype=float), np.array(b, dtype=float)
+        denom = np.linalg.norm(va) * np.linalg.norm(vb)
+        return float(np.dot(va, vb) / denom) if denom > 1e-9 else 0.0
+    # sparse: dict of float (bag-of-tokens 降级)
+    if isinstance(a, dict) and isinstance(b, dict):
+        keys = set(a.keys()) & set(b.keys())
+        return sum(a[k] * b[k] for k in keys)
+    return 0.0
 
 
 # ── 文档构建 ──────────────────────────────────────────
@@ -112,16 +196,23 @@ def _load_kb_cn_map(kb_dir: str = "knowledge_base/table_docs") -> dict[str, str]
 def _build_table_doc(
     table: TableInfo,
     kb_chinese_map: dict[str, str] = None,
+    user_annotations: dict[str, str] = None,
 ) -> str:
     """把一张表的 schema 信息拼成适合向量化的文本。
 
-    包含：表名 + 字段名 + 枚举值 + KB 文档中文描述 + 隐式业务词扩展。
-    中文描述用于跨语言召回（如"低脂可回收产品"能命中 lc_Products）。
+    包含：表名 + 字段名 + 枚举值 + 用户补注（优先）+ KB 文档中文描述 + 隐式业务词扩展。
+    用户补注来自 data/schema_annotations.json，优先级高于 KB 文档。
     """
     raw_name = table.name
     parts = [raw_name]
 
-    # 注入 KB 文档中的中文描述（如果有），提升中文查询召回率
+    # 1. 优先注入用户在线补注（来自 UI 标注面板）
+    if user_annotations:
+        user_note = user_annotations.get(raw_name) or user_annotations.get(raw_name.lower(), "")
+        if user_note:
+            parts.append(user_note)
+
+    # 2. 注入 KB 文档中的中文描述（如果有），提升中文查询召回率
     if kb_chinese_map:
         # 全匹配
         cn = kb_chinese_map.get(raw_name.lower(), "")
@@ -245,12 +336,14 @@ class SchemaIndexer:
 
         # 从 KB 文档中预加载中文描述映射，传递给 _build_table_doc 提升中文召回
         kb_cn_map = _load_kb_cn_map()
+        # 加载用户在线补注（优先级高于 KB 文档）
+        user_annotations = _load_annotations()
 
         schema_info: SchemaInfo = inspect_schema(db_path=self.db_path, adapter=self.adapter)
         entries: List[TableEntry] = []
 
         for table in schema_info.tables:
-            doc = _build_table_doc(table, kb_chinese_map=kb_cn_map)
+            doc = _build_table_doc(table, kb_chinese_map=kb_cn_map, user_annotations=user_annotations)
             vec = _embed(doc)
             enum_summary = {
                 c.name: c.enum_values

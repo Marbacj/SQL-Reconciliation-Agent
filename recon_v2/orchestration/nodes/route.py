@@ -82,7 +82,7 @@ def _embed_query(query: str) -> Dict[str, float]:
         tokens = _tokenize(query)
     except Exception:
         # 兜底：简单分词
-        tokens = list(query.lower())
+        tokens = list[str](query.lower())
 
     if not tokens:
         return {}
