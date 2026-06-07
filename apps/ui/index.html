@@ -1068,6 +1068,95 @@ pre.sql-code {
 .kb-doc-item:last-child { border-bottom: none; }
 .kb-doc-item:hover { background: var(--bg-raised); }
 
+/* Schema preview annotation */
+.schema-table-card {
+  border: 1px solid var(--border-dim);
+  border-radius: var(--radius-sm);
+  background: var(--bg-raised);
+  margin-bottom: 8px;
+  overflow: hidden;
+  transition: border-color 0.15s;
+}
+.schema-table-card:hover { border-color: var(--border); }
+.schema-table-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  background: var(--bg-base);
+  border-bottom: 1px solid var(--border-dim);
+  cursor: pointer;
+  user-select: none;
+}
+.schema-table-name {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--accent);
+  font-family: 'DM Mono', monospace;
+}
+.schema-table-cols {
+  font-size: 10px;
+  color: var(--text-muted);
+}
+.schema-table-body { padding: 10px 12px; }
+.schema-doc-text {
+  font-size: 11px;
+  color: var(--text-muted);
+  font-family: 'DM Mono', monospace;
+  line-height: 1.5;
+  word-break: break-all;
+  margin-bottom: 8px;
+  padding: 6px 8px;
+  background: var(--bg-base);
+  border-radius: 4px;
+  border: 1px solid var(--border-dim);
+}
+.schema-note-label {
+  font-size: 10px;
+  color: var(--text-muted);
+  margin-bottom: 4px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.schema-note-input {
+  width: 100%;
+  padding: 6px 8px;
+  background: var(--bg-base);
+  border: 1px solid var(--border-dim);
+  border-radius: 4px;
+  color: var(--text-base);
+  font-size: 11.5px;
+  font-family: 'DM Mono', monospace;
+  box-sizing: border-box;
+  resize: none;
+  transition: border-color 0.15s;
+  line-height: 1.5;
+}
+.schema-note-input:focus { outline: none; border-color: var(--accent); }
+.schema-note-input.has-note { border-color: oklch(72% 0.16 75 / 50%); }
+.schema-save-btn {
+  margin-top: 6px;
+  padding: 3px 10px;
+  font-size: 11px;
+  background: var(--accent-glow);
+  border: 1px solid oklch(72% 0.16 75 / 35%);
+  border-radius: 4px;
+  color: var(--accent);
+  cursor: pointer;
+  transition: background 0.12s;
+}
+.schema-save-btn:hover { background: oklch(72% 0.16 75 / 25%); }
+.schema-saved-badge {
+  display: inline-block;
+  margin-left: 6px;
+  font-size: 10px;
+  color: var(--accent);
+  opacity: 0;
+  transition: opacity 0.3s;
+}
+.schema-saved-badge.show { opacity: 1; }
+
 /* Evolution status */
 .evo-status {
   padding: 12px;
@@ -1698,6 +1787,25 @@ footer {
       <button class="sp-btn primary" style="width:100%;margin-top:8px" onclick="triggerReindex()">立即重建索引</button>
       <div id="reindexMsg" style="font-size:11.5px;color:var(--text-muted);margin-top:6px;min-height:16px"></div>
     </div>
+
+    <!-- Schema 预览 + 用户标注 -->
+    <div class="sp-section">
+      <div class="sp-section-label" style="display:flex;align-items:center;justify-content:space-between">
+        <span>Schema 预览 &amp; 标注</span>
+        <span style="display:flex;gap:6px;align-items:center">
+          <span id="schemaPreviewCount" style="font-size:10px;color:var(--text-muted)"></span>
+          <button class="sp-btn" style="padding:2px 8px;font-size:11px" onclick="loadSchemaPreview()">刷新</button>
+        </span>
+      </div>
+      <div style="font-size:11px;color:var(--text-muted);margin-bottom:8px;line-height:1.5">
+        为每张表添加中文描述，提升 AI 对业务语义的理解（替代手写 .md 文档）
+      </div>
+      <div id="schemaPreviewList" style="max-height:400px;overflow-y:auto">
+        <div style="padding:20px;text-align:center;color:var(--text-muted);font-size:12px">点击「刷新」加载 Schema</div>
+      </div>
+      <button class="sp-btn primary" style="width:100%;margin-top:10px" onclick="applyAnnotationReindex()">应用标注并重建索引</button>
+      <div id="annotationMsg" style="font-size:11.5px;color:var(--text-muted);margin-top:6px;min-height:16px"></div>
+    </div>
   </div>
 
   <!-- Tab: 知识库 -->
@@ -2288,6 +2396,13 @@ function switchTab(el, tabId) {
   if (tabId === 'tab-kb') kbLoadList();
   if (tabId === 'tab-features') loadAgentList();
   if (tabId === 'tab-model') loadModelConfig();
+  if (tabId === 'tab-datasource') {
+    // 如果还未加载过 schema 预览，自动加载
+    const listEl = document.getElementById('schemaPreviewList');
+    if (listEl && listEl.querySelectorAll('.schema-table-card').length === 0) {
+      loadSchemaPreview();
+    }
+  }
 }
 
 function toggleSwitch(id) {
@@ -2328,6 +2443,119 @@ async function rebuildKb() {
     await authFetch(reindexUrl, { method: 'POST' });
     alert('索引重建已触发');
   } catch { alert('服务未就绪'); }
+}
+
+/* ── Schema 预览 & 标注 ───────────────────────────────────────────────── */
+let _schemaAnnotations = {}; // 本地缓存：{table_name: note}
+
+async function loadSchemaPreview() {
+  const listEl = document.getElementById('schemaPreviewList');
+  const countEl = document.getElementById('schemaPreviewCount');
+  listEl.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text-muted);font-size:12px">加载中…</div>';
+  try {
+    const r = await authFetch(`${API_BASE}/schema/preview`);
+    const d = await r.json();
+    if (!d.index_ready) {
+      listEl.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text-muted);font-size:12px">索引未就绪，请先「立即重建索引」</div>';
+      return;
+    }
+    countEl.textContent = `${d.total} 张表`;
+    // 初始化本地注释缓存
+    d.tables.forEach(t => { if (t.user_note) _schemaAnnotations[t.table_name] = t.user_note; });
+    renderSchemaPreview(d.tables);
+  } catch (e) {
+    listEl.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text-muted);font-size:12px">加载失败，请检查服务是否运行</div>';
+  }
+}
+
+function renderSchemaPreview(tables) {
+  const listEl = document.getElementById('schemaPreviewList');
+  if (!tables || !tables.length) {
+    listEl.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text-muted);font-size:12px">暂无表数据</div>';
+    return;
+  }
+  listEl.innerHTML = tables.map(t => {
+    const note = _schemaAnnotations[t.table_name] || '';
+    const hasNote = note.trim().length > 0;
+    const colsText = t.columns && t.columns.length ? t.columns.slice(0, 5).join(', ') + (t.columns.length > 5 ? ` …+${t.columns.length - 5}` : '') : '';
+    return `
+      <div class="schema-table-card" id="schema-card-${t.table_name}">
+        <div class="schema-table-header" onclick="toggleSchemaCard('${t.table_name}')">
+          <span class="schema-table-name">${t.table_name}</span>
+          <span class="schema-table-cols">${colsText}</span>
+        </div>
+        <div class="schema-table-body" id="schema-body-${t.table_name}" style="display:none">
+          <div class="schema-doc-text" title="向量化文本">${escapeHtml(t.doc_text)}</div>
+          <div class="schema-note-label">
+            <svg width="11" height="11" viewBox="0 0 11 11" fill="none">
+              <path d="M1 9.5l2-2 6-6-2-2-6 6-1 2 1 0zm2-2l-1.5 1.5" stroke="currentColor" stroke-width="1.1" stroke-linecap="round"/>
+            </svg>
+            中文补注
+            ${hasNote ? '<span style="color:var(--accent);font-size:9px">● 已标注</span>' : ''}
+          </div>
+          <textarea
+            class="schema-note-input${hasNote ? ' has-note' : ''}"
+            id="schema-note-${t.table_name}"
+            rows="2"
+            placeholder="输入中文描述，如：订单主表，记录每笔交易的状态和金额"
+            onchange="onSchemaNoteChange('${t.table_name}', this.value)"
+          >${escapeHtml(note)}</textarea>
+          <button class="schema-save-btn" onclick="saveSchemaAnnotation('${t.table_name}')">保存</button>
+          <span class="schema-saved-badge" id="schema-saved-${t.table_name}">✓ 已保存</span>
+        </div>
+      </div>`;
+  }).join('');
+}
+
+function toggleSchemaCard(tableName) {
+  const body = document.getElementById(`schema-body-${tableName}`);
+  if (body) body.style.display = body.style.display === 'none' ? '' : 'none';
+}
+
+function onSchemaNoteChange(tableName, value) {
+  _schemaAnnotations[tableName] = value;
+  const inp = document.getElementById(`schema-note-${tableName}`);
+  if (inp) inp.classList.toggle('has-note', value.trim().length > 0);
+}
+
+async function saveSchemaAnnotation(tableName) {
+  const note = _schemaAnnotations[tableName] || '';
+  try {
+    const r = await authFetch(`${API_BASE}/schema/annotation`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ table_name: tableName, user_note: note }),
+    });
+    if (r.ok) {
+      const badge = document.getElementById(`schema-saved-${tableName}`);
+      if (badge) { badge.classList.add('show'); setTimeout(() => badge.classList.remove('show'), 2000); }
+    }
+  } catch (e) {
+    alert('保存失败，请检查服务状态');
+  }
+}
+
+async function applyAnnotationReindex() {
+  const msg = document.getElementById('annotationMsg');
+  msg.textContent = '正在应用标注并重建索引…';
+  msg.style.color = 'var(--text-muted)';
+  try {
+    const r = await authFetch(`${API_BASE}/schema/annotation/reindex`, { method: 'POST' });
+    const d = await r.json();
+    msg.textContent = d.message || `索引重建成功（${d.tables || '?'} 张表）`;
+    msg.style.color = 'var(--ok)';
+    // 刷新预览，显示最新向量文本
+    await loadSchemaPreview();
+  } catch {
+    msg.textContent = '重建失败，请检查服务状态';
+    msg.style.color = 'var(--fail)';
+  }
+  setTimeout(() => { msg.textContent = ''; msg.style.color = ''; }, 5000);
+}
+
+function escapeHtml(str) {
+  if (!str) return '';
+  return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 
 /* ── Knowledge Base Management ───────────────────────────────────────── */
