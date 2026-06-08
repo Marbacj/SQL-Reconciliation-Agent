@@ -1,0 +1,88 @@
+<svg width="800" height="400" viewBox="0 0 800 400" xmlns="http://www.w3.org/2000/svg" font-family="'Segoe UI', system-ui, sans-serif">
+  <!-- Background -->
+  <rect width="800" height="400" fill="oklch(98% 0.005 240)" rx="16"/>
+  
+  <!-- Title -->
+  <text x="400" y="38" text-anchor="middle" font-size="17" font-weight="700" fill="oklch(25% 0.02 240)">SQL 自动修复：错误反馈循环</text>
+  <text x="400" y="58" text-anchor="middle" font-size="12" fill="oklch(55% 0.02 240)">一次成功率 60% → 错误反馈循环后 → 端到端成功率 90%+</text>
+
+  <!-- Step 1: Generate -->
+  <rect x="50" y="90" width="140" height="60" rx="12" fill="oklch(55% 0.18 260)"/>
+  <text x="120" y="117" text-anchor="middle" font-size="13" font-weight="600" fill="white">① LLM 生成 SQL</text>
+  <text x="120" y="135" text-anchor="middle" font-size="11" fill="oklch(88% 0.08 260)">基于 Schema + 问题</text>
+
+  <!-- Arrow -->
+  <line x1="190" y1="120" x2="240" y2="120" stroke="oklch(60% 0.02 240)" stroke-width="2" marker-end="url(#a1)"/>
+
+  <!-- Step 2: Execute -->
+  <rect x="240" y="90" width="140" height="60" rx="12" fill="oklch(55% 0.18 200)"/>
+  <text x="310" y="117" text-anchor="middle" font-size="13" font-weight="600" fill="white">② 数据库执行</text>
+  <text x="310" y="135" text-anchor="middle" font-size="11" fill="oklch(88% 0.08 200)">SQLite / MySQL / CH</text>
+
+  <!-- Arrow to decision -->
+  <line x1="380" y1="120" x2="430" y2="120" stroke="oklch(60% 0.02 240)" stroke-width="2" marker-end="url(#a1)"/>
+
+  <!-- Decision diamond -->
+  <polygon points="510,90 590,120 510,150 430,120" fill="oklch(65% 0.15 55)"/>
+  <text x="510" y="115" text-anchor="middle" font-size="12" font-weight="600" fill="white">执行</text>
+  <text x="510" y="131" text-anchor="middle" font-size="12" font-weight="600" fill="white">成功？</text>
+
+  <!-- Success path -->
+  <line x1="590" y1="120" x2="650" y2="120" stroke="oklch(52% 0.18 145)" stroke-width="2.5" marker-end="url(#a2)"/>
+  <text x="620" y="112" text-anchor="middle" font-size="11" fill="oklch(45% 0.15 145)" font-weight="600">✓ 成功</text>
+  <rect x="650" y="90" width="110" height="60" rx="12" fill="oklch(52% 0.18 145)"/>
+  <text x="705" y="117" text-anchor="middle" font-size="13" font-weight="600" fill="white">✅ 返回结果</text>
+  <text x="705" y="135" text-anchor="middle" font-size="11" fill="oklch(88% 0.08 145)">差异报告生成</text>
+
+  <!-- Failure path down -->
+  <line x1="510" y1="150" x2="510" y2="200" stroke="oklch(65% 0.18 15)" stroke-width="2" marker-end="url(#a3)"/>
+  <text x="535" y="178" text-anchor="start" font-size="11" fill="oklch(50% 0.18 15)" font-weight="600">✗ 失败</text>
+
+  <!-- Error capture box -->
+  <rect x="370" y="200" width="280" height="60" rx="12" fill="oklch(95% 0.04 15)" stroke="oklch(70% 0.15 15)" stroke-width="1.5"/>
+  <text x="510" y="224" text-anchor="middle" font-size="12" font-weight="600" fill="oklch(45% 0.18 15)">③ 捕获真实错误信息</text>
+  <text x="510" y="243" text-anchor="middle" font-size="11" fill="oklch(50% 0.12 15)">"no such column: order_amount"</text>
+
+  <!-- Arrow: error → error context -->
+  <line x1="510" y1="260" x2="510" y2="300" stroke="oklch(65% 0.18 15)" stroke-width="2" marker-end="url(#a3)"/>
+
+  <!-- Retry context box -->
+  <rect x="330" y="300" width="360" height="60" rx="12" fill="oklch(94% 0.04 260)" stroke="oklch(65% 0.15 260)" stroke-width="1.5"/>
+  <text x="510" y="324" text-anchor="middle" font-size="12" font-weight="600" fill="oklch(40% 0.18 260)">④ 错误 + 原始 SQL → 注入 LLM Context</text>
+  <text x="510" y="343" text-anchor="middle" font-size="11" fill="oklch(50% 0.12 260)">让 LLM 看着错误修改，而非盲目重试</text>
+
+  <!-- Arrow back to step 1 -->
+  <path d="M 330 330 Q 120 330 120 160 L 120 150" 
+        stroke="oklch(60% 0.02 240)" stroke-width="2" fill="none" marker-end="url(#a1)" stroke-dasharray="6,3"/>
+
+  <!-- Retry badge -->
+  <rect x="60" y="240" width="120" height="36" rx="18" fill="oklch(65% 0.12 55)"/>
+  <text x="120" y="263" text-anchor="middle" font-size="11" font-weight="700" fill="white">最多重试 3 次</text>
+
+  <!-- Stats bar at bottom -->
+  <rect x="50" y="370" width="700" height="22" rx="6" fill="oklch(94% 0.01 240)"/>
+  
+  <!-- Before stat -->
+  <rect x="60" y="375" width="8" height="12" rx="2" fill="oklch(65% 0.18 15)"/>
+  <text x="76" y="386" font-size="11" fill="oklch(40% 0.02 240)">无修复循环：一次成功率 ~60%</text>
+  
+  <!-- After stat -->
+  <rect x="280" y="375" width="8" height="12" rx="2" fill="oklch(52% 0.18 145)"/>
+  <text x="296" y="386" font-size="11" fill="oklch(40% 0.02 240)">引入错误反馈循环后：端到端成功率 90%+</text>
+  
+  <!-- Improvement -->
+  <rect x="580" y="373" width="160" height="16" rx="4" fill="oklch(52% 0.18 145)" fill-opacity="0.2"/>
+  <text x="660" y="384" text-anchor="middle" font-size="11" font-weight="700" fill="oklch(42% 0.18 145)">↑ 提升 30%+</text>
+
+  <defs>
+    <marker id="a1" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L8,3 z" fill="oklch(60% 0.02 240)"/>
+    </marker>
+    <marker id="a2" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L8,3 z" fill="oklch(52% 0.18 145)"/>
+    </marker>
+    <marker id="a3" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L8,3 z" fill="oklch(65% 0.18 15)"/>
+    </marker>
+  </defs>
+</svg>

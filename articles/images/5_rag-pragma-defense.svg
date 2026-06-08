@@ -1,0 +1,94 @@
+<svg width="800" height="380" viewBox="0 0 800 380" xmlns="http://www.w3.org/2000/svg" font-family="'Segoe UI', system-ui, sans-serif">
+  <!-- Background -->
+  <rect width="800" height="380" fill="oklch(98% 0.005 240)" rx="16"/>
+  
+  <!-- Title -->
+  <text x="400" y="38" text-anchor="middle" font-size="17" font-weight="700" fill="oklch(25% 0.02 240)">RAG Schema Linking — 解决 LLM 表名幻觉问题</text>
+
+  <!-- Left: User question -->
+  <rect x="40" y="65" width="160" height="60" rx="12" fill="oklch(55% 0.18 260)"/>
+  <text x="120" y="91" text-anchor="middle" font-size="12" font-weight="600" fill="white">用户问题</text>
+  <text x="120" y="109" text-anchor="middle" font-size="10.5" fill="oklch(88% 0.08 260)">"对比 GMV 和订单差异"</text>
+
+  <!-- Arrow -->
+  <line x1="200" y1="95" x2="245" y2="95" stroke="oklch(60% 0.02 240)" stroke-width="2" marker-end="url(#b1)"/>
+
+  <!-- Embedding -->
+  <rect x="245" y="65" width="130" height="60" rx="12" fill="oklch(55% 0.15 300)"/>
+  <text x="310" y="91" text-anchor="middle" font-size="12" font-weight="600" fill="white">🔢 向量化</text>
+  <text x="310" y="109" text-anchor="middle" font-size="10.5" fill="oklch(88% 0.08 300)">text-embedding-3</text>
+
+  <!-- Arrow -->
+  <line x1="375" y1="95" x2="420" y2="95" stroke="oklch(60% 0.02 240)" stroke-width="2" marker-end="url(#b1)"/>
+
+  <!-- Vector store -->
+  <rect x="420" y="50" width="140" height="90" rx="12" fill="oklch(94% 0.04 200)" stroke="oklch(65% 0.15 200)" stroke-width="1.5"/>
+  <text x="490" y="76" text-anchor="middle" font-size="12" font-weight="600" fill="oklch(40% 0.18 200)">🗄️ 向量数据库</text>
+  <text x="490" y="94" text-anchor="middle" font-size="10" fill="oklch(50% 0.12 200)">live_gmv: 直播GMV汇总</text>
+  <text x="490" y="110" text-anchor="middle" font-size="10" fill="oklch(50% 0.12 200)">order_summary: 订单汇总</text>
+  <text x="490" y="126" text-anchor="middle" font-size="10" fill="oklch(50% 0.12 200)">payment_log: 支付流水</text>
+
+  <!-- Arrow -->
+  <line x1="560" y1="95" x2="605" y2="95" stroke="oklch(60% 0.02 240)" stroke-width="2" marker-end="url(#b1)"/>
+
+  <!-- Top K result -->
+  <rect x="605" y="65" width="155" height="60" rx="12" fill="oklch(52% 0.18 145)"/>
+  <text x="682" y="88" text-anchor="middle" font-size="12" font-weight="600" fill="white">Top-K 相关表</text>
+  <text x="682" y="106" text-anchor="middle" font-size="10.5" fill="oklch(88% 0.08 145)">live_gmv · order_summary</text>
+
+  <!-- Divider -->
+  <line x1="40" y1="155" x2="760" y2="155" stroke="oklch(88% 0.02 240)" stroke-width="1" stroke-dasharray="4,4"/>
+  <text x="400" y="148" text-anchor="middle" font-size="10" fill="oklch(65% 0.02 240)">只将相关表注入 Prompt，避免 Token 浪费和幻觉</text>
+
+  <!-- Second step: PRAGMA check -->
+  <text x="400" y="185" text-anchor="middle" font-size="14" font-weight="700" fill="oklch(30% 0.02 240)">第二层防御：实时 PRAGMA 校验</text>
+
+  <!-- LLM generates SQL -->
+  <rect x="60" y="205" width="160" height="60" rx="12" fill="oklch(55% 0.18 30)"/>
+  <text x="140" y="228" text-anchor="middle" font-size="12" font-weight="600" fill="white">LLM 生成 SQL</text>
+  <text x="140" y="246" text-anchor="middle" font-size="10.5" fill="oklch(88% 0.08 30)">SELECT gmv FROM live_gmv</text>
+
+  <!-- Arrow -->
+  <line x1="220" y1="235" x2="265" y2="235" stroke="oklch(60% 0.02 240)" stroke-width="2" marker-end="url(#b1)"/>
+
+  <!-- PRAGMA check -->
+  <rect x="265" y="205" width="160" height="60" rx="12" fill="oklch(55% 0.15 300)"/>
+  <text x="345" y="228" text-anchor="middle" font-size="12" font-weight="600" fill="white">PRAGMA table_info()</text>
+  <text x="345" y="246" text-anchor="middle" font-size="10.5" fill="oklch(88% 0.08 300)">验证表名 · 列名 · 类型</text>
+
+  <!-- Arrow: pass -->
+  <line x1="425" y1="225" x2="470" y2="205" stroke="oklch(52% 0.18 145)" stroke-width="2" marker-end="url(#b2)"/>
+  <text x="448" y="210" text-anchor="middle" font-size="10" fill="oklch(45% 0.18 145)" font-weight="600">✓ 通过</text>
+
+  <!-- Pass result -->
+  <rect x="470" y="175" width="140" height="50" rx="12" fill="oklch(52% 0.18 145)"/>
+  <text x="540" y="198" text-anchor="middle" font-size="12" font-weight="600" fill="white">✅ 安全执行</text>
+  <text x="540" y="215" text-anchor="middle" font-size="11" fill="oklch(88% 0.08 145)">递交数据库</text>
+
+  <!-- Arrow: fail -->
+  <line x1="425" y1="245" x2="470" y2="265" stroke="oklch(65% 0.18 15)" stroke-width="2" marker-end="url(#b3)"/>
+  <text x="448" y="270" text-anchor="middle" font-size="10" fill="oklch(50% 0.18 15)" font-weight="600">✗ 幻觉列名</text>
+
+  <!-- Fail result -->
+  <rect x="470" y="255" width="140" height="50" rx="12" fill="oklch(65% 0.18 15)"/>
+  <text x="540" y="278" text-anchor="middle" font-size="12" font-weight="600" fill="white">❌ 拦截</text>
+  <text x="540" y="295" text-anchor="middle" font-size="11" fill="oklch(94% 0.06 15)">进入错误修复循环</text>
+
+  <!-- Summary bar -->
+  <rect x="40" y="330" width="720" height="36" rx="10" fill="oklch(25% 0.02 240)"/>
+  <text x="400" y="353" text-anchor="middle" font-size="12" font-weight="600" fill="white">
+    双层防御：RAG Schema 检索（减少幻觉）+ PRAGMA 实时校验（兜底拦截）= Schema 幻觉基本消除
+  </text>
+
+  <defs>
+    <marker id="b1" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L8,3 z" fill="oklch(60% 0.02 240)"/>
+    </marker>
+    <marker id="b2" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L8,3 z" fill="oklch(52% 0.18 145)"/>
+    </marker>
+    <marker id="b3" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L8,3 z" fill="oklch(65% 0.18 15)"/>
+    </marker>
+  </defs>
+</svg>

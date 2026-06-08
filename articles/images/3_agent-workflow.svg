@@ -1,0 +1,114 @@
+<svg width="800" height="520" viewBox="0 0 800 520" xmlns="http://www.w3.org/2000/svg" font-family="'Segoe UI', system-ui, sans-serif">
+  <!-- Background -->
+  <rect width="800" height="520" fill="oklch(98% 0.005 240)" rx="16"/>
+  
+  <!-- Title -->
+  <text x="400" y="40" text-anchor="middle" font-size="18" font-weight="700" fill="oklch(25% 0.02 240)">SQL Reconciliation Agent — 完整执行流程</text>
+
+  <!-- User input box -->
+  <rect x="60" y="70" width="180" height="56" rx="12" fill="oklch(52% 0.18 145)" />
+  <text x="150" y="97" text-anchor="middle" font-size="13" font-weight="600" fill="white">🗣️ 自然语言输入</text>
+  <text x="150" y="115" text-anchor="middle" font-size="11" fill="oklch(90% 0.06 145)">对比昨天 GMV 差异</text>
+
+  <!-- Arrow 1 -->
+  <line x1="240" y1="98" x2="300" y2="98" stroke="oklch(60% 0.02 240)" stroke-width="2" marker-end="url(#arrow)"/>
+
+  <!-- Route node -->
+  <rect x="300" y="70" width="130" height="56" rx="12" fill="oklch(55% 0.18 260)"/>
+  <text x="365" y="97" text-anchor="middle" font-size="13" font-weight="600" fill="white">Route Node</text>
+  <text x="365" y="115" text-anchor="middle" font-size="11" fill="oklch(88% 0.08 260)">意图识别 · 路由</text>
+
+  <!-- Arrow 2 -->
+  <line x1="430" y1="98" x2="490" y2="98" stroke="oklch(60% 0.02 240)" stroke-width="2" marker-end="url(#arrow)"/>
+
+  <!-- Plan node -->
+  <rect x="490" y="70" width="130" height="56" rx="12" fill="oklch(55% 0.18 30)"/>
+  <text x="555" y="97" text-anchor="middle" font-size="13" font-weight="600" fill="white">Plan Node</text>
+  <text x="555" y="115" text-anchor="middle" font-size="11" fill="oklch(88% 0.08 30)">任务分解 · Schema RAG</text>
+
+  <!-- Arrow down from Plan to Act -->
+  <line x1="555" y1="126" x2="555" y2="178" stroke="oklch(60% 0.02 240)" stroke-width="2" marker-end="url(#arrow)"/>
+
+  <!-- Parallel execution area -->
+  <rect x="310" y="178" width="490" height="120" rx="12" fill="oklch(96% 0.01 30)" stroke="oklch(75% 0.1 30)" stroke-width="1.5" stroke-dasharray="6,3"/>
+  <text x="555" y="200" text-anchor="middle" font-size="12" fill="oklch(50% 0.12 30)" font-weight="600">⚡ 并行执行 asyncio.gather</text>
+  
+  <!-- SQL tasks -->
+  <rect x="330" y="210" width="120" height="40" rx="8" fill="oklch(62% 0.18 200)"/>
+  <text x="390" y="232" text-anchor="middle" font-size="11" font-weight="600" fill="white">SQL: 左表查询</text>
+
+  <rect x="495" y="210" width="120" height="40" rx="8" fill="oklch(62% 0.18 200)"/>
+  <text x="555" y="232" text-anchor="middle" font-size="11" font-weight="600" fill="white">SQL: 右表查询</text>
+
+  <rect x="660" y="210" width="120" height="40" rx="8" fill="oklch(62% 0.18 200)"/>
+  <text x="720" y="232" text-anchor="middle" font-size="11" font-weight="600" fill="white">SQL: 维度表</text>
+
+  <!-- Merge arrow -->
+  <line x1="390" y1="250" x2="390" y2="270" stroke="oklch(60% 0.02 240)" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <line x1="555" y1="250" x2="555" y2="270" stroke="oklch(60% 0.02 240)" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <line x1="720" y1="250" x2="720" y2="270" stroke="oklch(60% 0.02 240)" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <line x1="390" y1="275" x2="720" y2="275" stroke="oklch(60% 0.02 240)" stroke-width="1.5"/>
+  <line x1="555" y1="275" x2="555" y2="310" stroke="oklch(60% 0.02 240)" stroke-width="2" marker-end="url(#arrow)"/>
+
+  <!-- Observe node -->
+  <rect x="490" y="310" width="130" height="56" rx="12" fill="oklch(52% 0.18 310)"/>
+  <text x="555" y="337" text-anchor="middle" font-size="13" font-weight="600" fill="white">Observe Node</text>
+  <text x="555" y="355" text-anchor="middle" font-size="11" fill="oklch(88% 0.08 310)">结果观察 · 差异检测</text>
+
+  <!-- Error retry loop -->
+  <path d="M 490 338 Q 440 338 440 398 Q 440 460 490 460 Q 555 460 555 430 L 555 366" 
+        stroke="oklch(65% 0.18 15)" stroke-width="1.5" fill="none" stroke-dasharray="5,3" marker-end="url(#arrow-red)"/>
+  <text x="420" y="408" text-anchor="middle" font-size="10" fill="oklch(55% 0.18 15)">SQL错误</text>
+  <text x="420" y="422" text-anchor="middle" font-size="10" fill="oklch(55% 0.18 15)">自动修复</text>
+  <text x="420" y="436" text-anchor="middle" font-size="10" fill="oklch(55% 0.18 15)">最多3次</text>
+
+  <!-- Arrow to Reflect -->
+  <line x1="555" y1="366" x2="555" y2="406" stroke="oklch(60% 0.02 240)" stroke-width="2" marker-end="url(#arrow)"/>
+
+  <!-- Reflect node -->
+  <rect x="490" y="406" width="130" height="56" rx="12" fill="oklch(52% 0.18 145)"/>
+  <text x="555" y="433" text-anchor="middle" font-size="13" font-weight="600" fill="white">Reflect Node</text>
+  <text x="555" y="451" text-anchor="middle" font-size="11" fill="oklch(88% 0.08 145)">反思 · 报告生成</text>
+
+  <!-- Arrow to output -->
+  <line x1="490" y1="434" x2="430" y2="434" stroke="oklch(60% 0.02 240)" stroke-width="2" marker-end="url(#arrow)"/>
+
+  <!-- Output box -->
+  <rect x="60" y="406" width="180" height="56" rx="12" fill="oklch(42% 0.15 240)"/>
+  <text x="150" y="433" text-anchor="middle" font-size="13" font-weight="600" fill="white">📊 差异报告</text>
+  <text x="150" y="451" text-anchor="middle" font-size="11" fill="oklch(85% 0.08 240)">Markdown · 可追溯</text>
+
+  <!-- Clarify branch -->
+  <line x1="365" y1="126" x2="200" y2="175" stroke="oklch(65% 0.18 55)" stroke-width="1.5" stroke-dasharray="5,3" marker-end="url(#arrow-orange)"/>
+  <rect x="120" y="175" width="160" height="44" rx="10" fill="oklch(75% 0.15 55)" fill-opacity="0.25" stroke="oklch(65% 0.18 55)" stroke-width="1.5"/>
+  <text x="200" y="195" text-anchor="middle" font-size="11" font-weight="600" fill="oklch(40% 0.18 55)">💬 Clarify Node</text>
+  <text x="200" y="210" text-anchor="middle" font-size="10" fill="oklch(45% 0.12 55)">问题模糊时主动追问</text>
+
+  <!-- Legend -->
+  <rect x="60" y="480" width="680" height="28" rx="8" fill="oklch(94% 0.01 240)"/>
+  <rect x="75" y="489" width="10" height="10" rx="2" fill="oklch(55% 0.18 260)"/>
+  <text x="92" y="499" font-size="11" fill="oklch(40% 0.02 240)">意图路由</text>
+  <rect x="155" y="489" width="10" height="10" rx="2" fill="oklch(55% 0.18 30)"/>
+  <text x="172" y="499" font-size="11" fill="oklch(40% 0.02 240)">任务规划</text>
+  <rect x="235" y="489" width="10" height="10" rx="2" fill="oklch(62% 0.18 200)"/>
+  <text x="252" y="499" font-size="11" fill="oklch(40% 0.02 240)">并行SQL执行</text>
+  <rect x="340" y="489" width="10" height="10" rx="2" fill="oklch(52% 0.18 310)"/>
+  <text x="357" y="499" font-size="11" fill="oklch(40% 0.02 240)">观察&amp;校验</text>
+  <rect x="435" y="489" width="10" height="10" rx="2" fill="oklch(52% 0.18 145)"/>
+  <text x="452" y="499" font-size="11" fill="oklch(40% 0.02 240)">反思&amp;生成报告</text>
+  <rect x="550" y="489" width="10" height="10" rx="2" fill="oklch(65% 0.18 15)"/>
+  <text x="567" y="499" font-size="11" fill="oklch(40% 0.02 240)">错误自动修复循环</text>
+
+  <!-- Arrow markers -->
+  <defs>
+    <marker id="arrow" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L8,3 z" fill="oklch(60% 0.02 240)"/>
+    </marker>
+    <marker id="arrow-red" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L8,3 z" fill="oklch(65% 0.18 15)"/>
+    </marker>
+    <marker id="arrow-orange" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L8,3 z" fill="oklch(65% 0.18 55)"/>
+    </marker>
+  </defs>
+</svg>
