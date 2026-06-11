@@ -69,7 +69,10 @@ def _template_solve(query: str, intent: str) -> Optional[str]:
 # ---------------- LLM 工具选择 ----------------
 
 
-_SQLITE_RULES = """
+# ── 方言感知的 SQL 规则 ──────────────────────────────────────────
+
+_DIALECT_RULES: dict[str, str] = {
+    "sqlite": """
 SQLite date/time rules (MUST follow):
 - Yesterday: DATE('now', '-1 day')
 - Today: DATE('now')
@@ -77,13 +80,52 @@ SQLite date/time rules (MUST follow):
 - Last 24 hours: created_at >= DATETIME('now', '-1 day')  [for DATETIME columns]
 - Last N days: DATE('now', '-N days')  e.g. DATE('now', '-3 days')
 - This week: created_at >= DATE('now', 'weekday 0', '-7 days')
-- Last week Sunday: DATE('now', 'weekday 0', '-7 days')
 - This month: strftime('%Y-%m', created_at) = strftime('%Y-%m', 'now')
 - Last month: strftime('%Y-%m', created_at) = strftime('%Y-%m', 'now', '-1 month')
 - Hour extraction: CAST(strftime('%H', created_at) AS INTEGER)
-FORBIDDEN: INTERVAL, CURDATE(), DATE_SUB(), NOW(), EXTRACT(), DATEDIFF(), STDDEV(), stddev_samp(), stddev_pop()
-For standard deviation: use SQRT(AVG((val - (SELECT AVG(val) FROM t)) * (val - (SELECT AVG(val) FROM t))))
-"""
+FORBIDDEN: INTERVAL, CURDATE(), DATE_SUB(), NOW(), EXTRACT(), DATEDIFF(), STDDEV()
+For stddev: use SQRT(AVG((val - (SELECT AVG(val) FROM t)) * (val - (SELECT AVG(val) FROM t))))
+""",
+    "mysql": """
+MySQL date/time rules:
+- Yesterday: DATE_SUB(CURDATE(), INTERVAL 1 DAY)
+- Today: CURDATE()
+- Last 7 days: created_at >= DATE_SUB(NOW(), INTERVAL 7 DAY)
+- Last N days: created_at >= DATE_SUB(NOW(), INTERVAL N DAY)
+- This month: MONTH(created_at) = MONTH(NOW()) AND YEAR(created_at) = YEAR(NOW())
+- Last month: PERIOD_DIFF(DATE_FORMAT(NOW(),'%Y%m'), DATE_FORMAT(created_at,'%Y%m')) = 1
+- Hour extraction: HOUR(created_at)
+- Use LIMIT for pagination; use GROUP_CONCAT for aggregation
+- Use IFNULL(col, 0) for null handling
+""",
+    "postgres": """
+PostgreSQL date/time rules:
+- Yesterday: CURRENT_DATE - INTERVAL '1 day'
+- Today: CURRENT_DATE
+- Last 7 days: created_at >= NOW() - INTERVAL '7 days'
+- Last N days: created_at >= NOW() - INTERVAL 'N days'
+- This month: DATE_TRUNC('month', created_at) = DATE_TRUNC('month', NOW())
+- Last month: DATE_TRUNC('month', created_at) = DATE_TRUNC('month', NOW() - INTERVAL '1 month')
+- Hour extraction: EXTRACT(HOUR FROM created_at)
+- Use ILIKE for case-insensitive search; COALESCE(col, 0) for null handling
+- Use LIMIT/OFFSET for pagination
+""",
+}
+
+# 默认兜底（兼容旧代码引用 _SQLITE_RULES）
+_SQLITE_RULES = _DIALECT_RULES["sqlite"]
+
+
+def _get_dialect_rules(ctx) -> str:
+    """从 ctx.tools.sql_runner.adapter.dialect 获取对应方言规则，fallback 到 SQLite。"""
+    try:
+        runner = ctx.tools.get("sql_runner") if ctx.tools else None
+        if runner and hasattr(runner, "adapter"):
+            dialect = getattr(runner.adapter, "dialect", "sqlite")
+            return _DIALECT_RULES.get(dialect, _SQLITE_RULES)
+    except Exception:
+        pass
+    return _SQLITE_RULES
 
 # _SCHEMA_DESC 已移除：改为 _get_schema_desc() 实时从 SchemaInspector 获取
 _SCHEMA_DESC_FALLBACK = (
@@ -165,6 +207,7 @@ CRITICAL SQL GENERATION RULES:
 3. Return ONLY the columns needed for the answer - minimize extra columns
 4. For 'all records' queries, do NOT add 'success/paid/cancelled' filters
 5. For JOINs: qualify ALL column names with table aliases (e.g., o.created_at, p.amount)
+6. For queries about NEGATIVE amounts / 负数金额 / 异常金额: ALWAYS query the `orders` table (orders.amount can be negative). The `refunds` table amount is ALWAYS positive - never query refunds for negative values.
 """
 
 
@@ -187,17 +230,32 @@ def _llm_pick_tool(ctx, query: str, intent: str, plan: List[str], state: Optiona
             last_sql = state.get("last_failed_sql", "")
             retry_count = state.get("retry_count", 0)
             if last_error and last_sql:
-                correction_hint = (
-                    f"\n[CORRECTION REQUIRED - Attempt {retry_count + 1}]\n"
-                    f"Your previous SQL FAILED:\n"
-                    f"  SQL: {last_sql}\n"
-                    f"  Error: {last_error}\n"
-                    f"You MUST fix the SQL. Common fixes:\n"
-                    f"  - Table not found: check schema below for correct table names\n"
-                    f"  - Column not found: check schema below for correct column names\n"
-                    f"  - Syntax error: review SQLite syntax rules\n"
-                    f"Generate a DIFFERENT, corrected SQL.\n"
-                )
+                # 区分「行数过多」和「执行失败」两种场景，给出更精准的修正指示
+                if "too many rows" in last_error or "missing WHERE" in last_error:
+                    correction_hint = (
+                        f"\n[CORRECTION REQUIRED - Attempt {retry_count + 1}]\n"
+                        f"Your previous SQL returned TOO MANY ROWS (likely full table scan):\n"
+                        f"  SQL: {last_sql}\n"
+                        f"  Issue: {last_error}\n"
+                        f"You MUST add specific WHERE/filter conditions. Rules:\n"
+                        f"  - For recon queries: add date range filter (e.g., DATE(created_at) = DATE('now','-1 day'))\n"
+                        f"  - For diff queries: add JOIN condition with value comparison\n"
+                        f"  - For time_window: MUST include date/time filter in WHERE clause\n"
+                        f"  - For numeric_diff: MUST include comparison condition (e.g., o.amount != p.amount)\n"
+                        f"Generate a CORRECTED SQL with proper WHERE conditions.\n"
+                    )
+                else:
+                    correction_hint = (
+                        f"\n[CORRECTION REQUIRED - Attempt {retry_count + 1}]\n"
+                        f"Your previous SQL FAILED:\n"
+                        f"  SQL: {last_sql}\n"
+                        f"  Error: {last_error}\n"
+                        f"You MUST fix the SQL. Common fixes:\n"
+                        f"  - Table not found: check schema below for correct table names\n"
+                        f"  - Column not found: check schema below for correct column names\n"
+                        f"  - Syntax error: review SQLite syntax rules\n"
+                        f"Generate a DIFFERENT, corrected SQL.\n"
+                    )
 
         # ---- RAG 检索：注入知识库中的题目解读/业务规则 ----
         rag_hint = ""
@@ -246,12 +304,18 @@ def _llm_pick_tool(ctx, query: str, intent: str, plan: List[str], state: Optiona
             except Exception as e:
                 logger.debug("Memory query failed (non-fatal): %s", e)
 
+        dialect_rules = _get_dialect_rules(ctx)
         sys_msg = (
-            "You are a SQL reconciliation agent. Generate ONE tool call to solve the query.\n"
+            "You are a Data Agent — a universal enterprise data query and reconciliation assistant.\n"
+            "Your capabilities:\n"
+            "  - Answer any data question (trends, rankings, aggregations, comparisons)\n"
+            "  - Perform reconciliation between two data sources (find missing rows, value mismatches)\n"
+            "  - Support multiple SQL dialects (SQLite, MySQL, PostgreSQL)\n\n"
+            "Generate ONE tool call to solve the query.\n"
             "Respond ONLY with JSON (no markdown, no explanation): "
             "{\"name\": \"sql_runner\", \"args\": {\"sql\": \"<SELECT ...>\", \"apply_limit\": true}}\n"
             f"{schema_desc}\n"
-            f"{_SQLITE_RULES}\n"
+            f"{dialect_rules}\n"
             f"{_SQL_PRINCIPLES}"
             f"{memory_hint}"
             f"{rag_hint}"

@@ -77,26 +77,82 @@ _COUNT_KEYWORDS = re.compile(
     r"(count|笔数|订单数|数量|cnt)", re.IGNORECASE
 )
 
+# ── Intent-Aware 行数上限（超过则判定为「全表返回」，触发 retry）─────────
+# 规则来源：业务语义推断
+#   - 聚合/COUNT 查询：永远是 1 行
+#   - 对账差异/time_window：通常 0~几十行
+#   - 枚举/GROUP BY：和枚举值数量一样（一般 < 20）
+#   - multi_table_join：JOIN 结果可能多，但不应该是全表（设宽松阈值）
+#   - simple_query：相对宽松，列表类查询可能数百行
+_INTENT_ROW_LIMIT: Dict[str, int] = {
+    "time_window_recon": 200,   # 对账差异，期望 0~几十行
+    "numeric_diff":       200,  # 金额差异，期望 0~几十行
+    "multi_table_join":   500,  # JOIN，宽松
+    "simple_query":       500,  # 列表类，宽松
+    "boundary_edge":      500,  # 边界/安全，宽松
+}
+_DEFAULT_ROW_LIMIT = 500
+
+# 若 SQL 里有聚合函数，期望返回 1 行，超过 50 行就异常
+_AGGREGATION_SQL_RE = re.compile(
+    r"\b(COUNT|SUM|AVG|MAX|MIN)\s*\(", re.IGNORECASE
+)
+# 若 SQL 里没有 WHERE/JOIN/GROUP，认为全表扫描
+_MISSING_FILTER_RE = re.compile(
+    r"SELECT\s+.+\s+FROM\s+\w+\s*$", re.IGNORECASE | re.DOTALL
+)
+
 
 def _check_range_guard(
     query: str,
     sql: str,
     rows: List[Any],
     row_count: int,
-) -> List[str]:
-    """业务合理性检查，返回警告信息列表（空列表 = 通过）。
+    intent: str = "",
+) -> Tuple[List[str], bool]:
+    """业务合理性检查。
 
-    不阻断结果，仅附加到 answer 供用户判断。
+    返回 (warnings, should_retry)：
+      - warnings: 警告信息列表
+      - should_retry: True 表示结果不合理，应触发 retry（而非只展示 warning）
+
+    should_retry 触发条件：
+      - 行数超过 Intent-Aware 阈值（全表返回检测）
+      - 聚合查询但返回超过 50 行
     """
     warnings: List[str] = []
+    should_retry = False
 
     if not rows:
         # 空结果检查：如果 SQL 含精确 WHERE 过滤（=、IN 等），可能条件过严
         if sql and re.search(r"WHERE\s+.*=\s*['\"]", sql, re.IGNORECASE):
             warnings.append("结果为空，WHERE 条件可能过于严格，请确认过滤条件是否正确。")
-        return warnings
+        return warnings, should_retry
 
-    # 提取首行首个数值
+    # ── 新增：行数过多检测（全表返回）────────────────────────────────
+    # 1. 聚合 SQL（COUNT/SUM/AVG 等）理论上返回 1~几行，超过 50 行必然有问题
+    if sql and _AGGREGATION_SQL_RE.search(sql) and row_count > 50:
+        warnings.append(
+            f"⚠️ 聚合查询返回了 {row_count} 行，远超预期（通常应为 1 行），"
+            f"SQL 可能缺少 GROUP BY 或 WHERE 条件。"
+        )
+        should_retry = True
+
+    # 2. Intent-Aware 行数上限
+    elif row_count > 0:
+        limit = _INTENT_ROW_LIMIT.get(intent, _DEFAULT_ROW_LIMIT)
+        if row_count > limit:
+            # 进一步判断：SQL 里是否缺 WHERE/JOIN（全表扫描特征）
+            sql_upper = sql.upper() if sql else ""
+            has_filter = any(kw in sql_upper for kw in ("WHERE", "JOIN", "GROUP BY", "HAVING"))
+            if not has_filter or row_count > limit * 2:
+                warnings.append(
+                    f"⚠️ 查询返回 {row_count} 行，超过 {intent or '当前意图'} 的合理上限（{limit} 行），"
+                    f"SQL 可能缺少过滤条件（WHERE/JOIN），导致全表扫描。"
+                )
+                should_retry = True
+
+    # 提取首行首个数值（用于金额/比率检查）
     first_value: Optional[float] = None
     try:
         first_row = rows[0]
@@ -112,7 +168,7 @@ def _check_range_guard(
         first_value = None
 
     if first_value is None:
-        return warnings
+        return warnings, should_retry
 
     # 1. 金额不应为负（SUM/AVG 查询）
     if _AMOUNT_KEYWORDS.search(query) or (
@@ -143,7 +199,7 @@ def _check_range_guard(
     if first_value == 0 and _AMOUNT_KEYWORDS.search(query):
         warnings.append("结果为 0，请确认时间范围内是否有数据，以及 status 过滤条件是否正确。")
 
-    return warnings
+    return warnings, should_retry
 
 
 # ── 辅助函数 ────────────────────────────────────────────────────────
@@ -786,10 +842,11 @@ def observe_node(state: GraphState) -> dict:
             answer = summary
             status = "ok"
 
-            # ── Range Guard：业务合理性检查 ──
+            # ── Range Guard：业务合理性检查（含行数过多 → retry）──
             rows = last_obs.get("rows", [])
             row_count = last_obs.get("row_count", 0)
-            guard_warnings = _check_range_guard(query, sql, rows, row_count)
+            intent = state.get("intent", "")
+            guard_warnings, should_retry = _check_range_guard(query, sql, rows, row_count, intent)
 
             # ── 空结果增强诊断 ──
             if not rows and last_call.get("name") == "sql_runner":
@@ -802,12 +859,44 @@ def observe_node(state: GraphState) -> dict:
                 warning_text = "\n".join(guard_warnings)
                 answer = f"{answer}\n\n【数据校验提示】\n{warning_text}"
                 logger.info(
-                    "observe: range guard triggered for query=%r: %s",
+                    "observe: range guard triggered for query=%r: %s (should_retry=%s)",
                     query[:60],
                     guard_warnings,
+                    should_retry,
                 )
-                if len(guard_warnings) >= 2:
-                    status = "needs_review"
+
+            # 行数异常且未超过 retry 上限 → 触发 retry（写 last_sql_error + last_failed_sql）
+            if should_retry and retry_count < max_retries:
+                status = "needs_retry"
+                logger.info(
+                    "observe: row count anomaly, triggering retry (retry_count=%d) for query=%r",
+                    retry_count, query[:60],
+                )
+                # 把行数异常原因和上次 SQL 写入 state，act 节点的 correction_hint 会读取
+                # 同时清除 plan_steps 里的 parallel 步骤，让 act 走普通单步路径重生成 SQL
+                cleaned_plan_steps = [
+                    s for s in state.get("plan_steps", [])
+                    if not (isinstance(s, dict) and "parallel" in s)
+                ]
+                ctx.step()
+                return {
+                    "sql": sql,
+                    "answer": answer,
+                    "final_status": status,
+                    "error": guard_warnings[0] if guard_warnings else "row count anomaly",
+                    "retry_count": retry_count + 1,  # 递增计数，防止无限 retry
+                    "plan_steps": cleaned_plan_steps,  # 清除 parallel 步骤，强制走单步路径
+                    "parallel_results": {},            # 清除之前的并行结果
+                    "last_sql_error": (
+                        f"Result has too many rows ({row_count} rows). "
+                        f"SQL likely missing WHERE/filter condition. "
+                        f"Add specific filter for {intent} intent. "
+                        f"Warning: {guard_warnings[0] if guard_warnings else ''}"
+                    ),
+                    "last_failed_sql": sql,
+                }
+            elif guard_warnings and len(guard_warnings) >= 2:
+                status = "needs_review"
 
         # ── 失败路径 ─────────────────────────────────────────────────
         else:
@@ -881,6 +970,15 @@ def observe_decide(state: GraphState) -> str:
     # needs_review → 直接终止（已在 answer 里附上警告，交给用户判断）
     if status == "needs_review":
         return "reflect"
+
+    # needs_retry（行数异常，Range Guard 触发重试）→ 重新 act
+    if status == "needs_retry":
+        retry_count = state.get("retry_count", 0)
+        obs_count = len(state.get("observations", []))
+        max_retries = 3
+        if retry_count >= max_retries or obs_count >= MAX_ACT_ITER:
+            return "reflect"
+        return "act"
 
     # 工具失败 → 判断是否还有重试机会
     last_obs_list = state.get("observations", [])

@@ -240,7 +240,7 @@ def run(
     print(f"[runner] target={target} adapter={adapter.name} cases={len(cases)}")
 
     metrics: List[CaseMetric] = []
-    for i, case in enumerate(cases, 1):
+    for i, case in enumerate[GoldenCase](cases, 1):
         m = run_single(adapter, case, db_path)
         metrics.append(m)
         flag = "OK" if m.exec_acc and m.sem_match else ("ACC" if m.exec_acc else "FAIL")
