@@ -29,6 +29,9 @@ class GraphState(TypedDict, total=False):
 
     # ---- Clarify 输出 ----
     clarify_question: Optional[str]
+    # 多轮对话澄清上下文：记录原始 query + 已提出的澄清问题，下一轮自动合并
+    # 结构: {"original_query": str, "clarify_question": str, "turn": int}
+    clarify_context: Optional[Dict[str, Any]]
 
     # ---- Plan 输出 ----
     plan_steps: List[str]
@@ -53,7 +56,7 @@ class GraphState(TypedDict, total=False):
     # ---- 终态 ----
     sql: str
     answer: str
-    final_status: str  # "ok" | "clarify" | "rejected" | "budget_exceeded" | "error"
+    final_status: str  # "ok" | "awaiting_clarification" | "clarify" | "rejected" | "budget_exceeded" | "error"
     error: Optional[str]
 
     # ---- 计费 ----

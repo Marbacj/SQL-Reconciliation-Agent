@@ -3,6 +3,11 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
+<!-- marked.js: Markdown 渲染，无需 DOMPurify（输出内容来自自家 LLM，可信） -->
+<script src="https://cdn.jsdelivr.net/npm/marked@9/marked.min.js"></script>
 <title>Recon Agent — SQL 对账助手</title>
 <link rel="icon" type="image/svg+xml" href="/favicon.svg">
 <style>
@@ -765,6 +770,99 @@ pre.sql-code {
   font-size: 11px;
   color: var(--text-muted);
   margin-left: 4px;
+}
+
+/* ─── 多轮澄清气泡 ─── */
+.clarify-bubble {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 14px 16px;
+  border-left: 3px solid oklch(75% 0.18 55);   /* 琥珀色强调 */
+  background: oklch(28% 0.04 55 / 0.35);
+  border-radius: 6px;
+  margin: 6px 0 2px;
+}
+.clarify-icon { font-size: 20px; line-height: 1; }
+.clarify-text {
+  font-size: 13px;
+  color: var(--text-base);
+  line-height: 1.7;
+  white-space: pre-wrap;
+}
+/* Markdown 渲染后取消 pre-wrap，让 marked.js 的 <p>/<ul>/<strong> 正常显示 */
+.clarify-text.clarify-md {
+  white-space: normal;
+}
+.clarify-text.clarify-md p   { margin: 0 0 8px; }
+.clarify-text.clarify-md ul,
+.clarify-text.clarify-md ol  { margin: 4px 0 8px 18px; padding: 0; }
+.clarify-text.clarify-md li  { margin-bottom: 3px; }
+.clarify-text.clarify-md strong { color: var(--text-bright); }
+.clarify-text.clarify-md code {
+  background: var(--bg-raised);
+  border-radius: 3px;
+  padding: 1px 5px;
+  font-size: 12px;
+  color: oklch(70% 0.15 210);
+}
+.clarify-text.clarify-md h1,
+.clarify-text.clarify-md h2,
+.clarify-text.clarify-md h3 { margin: 6px 0 4px; font-size: 13px; }
+.clarify-hint {
+  font-size: 11px;
+  color: oklch(75% 0.18 55);
+  padding-top: 6px;
+  border-top: 1px solid oklch(75% 0.18 55 / 0.25);
+}
+/* 输入框等待澄清状态 */
+textarea#query-input.clarify-waiting {
+  border-color: oklch(75% 0.18 55) !important;
+  box-shadow: 0 0 0 2px oklch(75% 0.18 55 / 0.25);
+}
+textarea#query-input.clarify-waiting::placeholder {
+  color: oklch(75% 0.18 55 / 0.8);
+}
+/* chip 点击瞬间高亮 */
+textarea#query-input.clarify-chip-selected {
+  border-color: var(--accent) !important;
+  box-shadow: 0 0 0 2px var(--accent-dim, oklch(60% 0.2 250 / 0.3));
+}
+
+/* ─── 澄清快捷 chips ─── */
+.clarify-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding-top: 10px;
+}
+.clarify-chip {
+  padding: 6px 14px;
+  border-radius: 20px;                       /* 胶囊形，区分于首页方形 chips */
+  border: 1px solid oklch(75% 0.18 55 / 0.5);
+  background: oklch(75% 0.18 55 / 0.08);
+  color: oklch(85% 0.12 55);
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.15s var(--ease-out);
+  animation: fade-up 300ms var(--ease-out) both;
+  white-space: nowrap;
+  line-height: 1.4;
+}
+.clarify-chip:nth-child(1) { animation-delay: 40ms; }
+.clarify-chip:nth-child(2) { animation-delay: 90ms; }
+.clarify-chip:nth-child(3) { animation-delay: 140ms; }
+.clarify-chip:nth-child(4) { animation-delay: 190ms; }
+.clarify-chip:hover {
+  border-color: oklch(75% 0.18 55);
+  background: oklch(75% 0.18 55 / 0.18);
+  color: oklch(95% 0.08 55);
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px oklch(75% 0.18 55 / 0.2);
+}
+.clarify-chip:active {
+  transform: translateY(0);
+  background: oklch(75% 0.18 55 / 0.25);
 }
 
 /* 重新生成提示气泡 */
@@ -2235,6 +2333,11 @@ let queryHistory = [];
 let historyIndex = -1;
 let isLoading = false;
 
+// ── 多轮对话澄清状态 ──────────────────────────────────────────────────────
+// 当 Agent 返回 status=awaiting_clarification 时，保存 clarify_context
+// 下一次发送时自动带上，发送后清除
+let _pendingClarifyCtx = null;
+
 /* ── Session helpers ── */
 function genId() { return 'sess_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7); }
 
@@ -2287,6 +2390,13 @@ function renderSidebarItem(id, title, active) {
 /* ── 切换到已有会话 ── */
 async function switchToSession(id) {
   if (id === currentSessionId) return;
+  // 切换会话时清除待处理的澄清上下文
+  _pendingClarifyCtx = null;
+  const inputEl = document.getElementById('query-input');
+  if (inputEl) {
+    inputEl.placeholder = '用自然语言描述你的对账问题…';
+    inputEl.classList.remove('clarify-waiting');
+  }
   // 高亮侧边栏
   document.querySelectorAll('#history-list .history-item').forEach(el => {
     el.classList.toggle('active', el.dataset.sessionId === id);
@@ -2354,6 +2464,13 @@ function newSession() {
   queryHistory = [];
   historyIndex = -1;
   historyMsgNodes.length = 0;
+  // 清除澄清上下文
+  _pendingClarifyCtx = null;
+  const inputEl = document.getElementById('query-input');
+  if (inputEl) {
+    inputEl.placeholder = '用自然语言描述你的对账问题…';
+    inputEl.classList.remove('clarify-waiting');
+  }
   // 清空聊天区
   const messages = document.getElementById('messages');
   messages.innerHTML = '';
@@ -2946,6 +3063,31 @@ function fillQuery(text) {
   input.focus();
 }
 
+/**
+ * Markdown 渲染（依赖 marked.js CDN）
+ * 若 marked 未加载则降级为 escapeHtml + <br>
+ */
+function renderMd(text) {
+  if (typeof marked !== 'undefined') {
+    return marked.parse(text, { breaks: true, gfm: true });
+  }
+  return escapeHtml(text).replace(/\n/g, '<br>');
+}
+
+/**
+ * 澄清 chip 点击处理：填入输入框并立即发送
+ * 使用事件委托——不需要 inline onclick，避免 JSON 引号污染 HTML 属性
+ */
+function fillClarify(text) {
+  const input = document.getElementById('query-input');
+  input.value = text;
+  autoResize(input);
+  input.focus();
+  // 直接发送，不等待动画
+  sendQuery();
+}
+
+// 事件委托已移除：chips 在 DOM API 创建时直接绑定 addEventListener，更可靠
 /* ─────────────────────────────────────────────
    Pipeline nodes config
 ───────────────────────────────────────────── */
@@ -3092,6 +3234,14 @@ async function submitFeedback(eid, correct) {
       body: JSON.stringify({ trace_id: traceId, query, sql, answer, intent, correct }),
     });
     const data = await res.json();
+    // ── 调试：打印完整响应（可在 DevTools Console 查看）──
+    console.log('[ReconAgent] API response:', JSON.stringify({
+      status: data.status,
+      final_status: data.final_status,
+      sql: data.sql,
+      has_clarify_ctx: !!data.clarify_context,
+      suggestions: data.clarify_context?.suggestions,
+    }));
     // 显示感谢文字
     const thanks = document.createElement('span');
     thanks.className = 'feedback-thanks';
@@ -3307,10 +3457,20 @@ async function sendQuery() {
   const t0 = performance.now();
 
   try {
+    // 若存在待处理的澄清上下文（上轮 Agent 问了问题），透传给后端
+    const reqBody = {
+      query: text,
+      db_path: document.getElementById('cfgDbPath')?.value?.trim() || null,
+    };
+    if (_pendingClarifyCtx) {
+      reqBody.clarify_context = _pendingClarifyCtx;
+      _pendingClarifyCtx = null;  // 透传后立即清除，避免后续轮次误带
+    }
+
     const res = await authFetch(`${API_BASE}/query`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ query: text, db_path: document.getElementById('cfgDbPath')?.value?.trim() || null }),
+      body: JSON.stringify(reqBody),
     });
 
     clearInterval(animInterval);
@@ -3326,6 +3486,88 @@ async function sendQuery() {
 
     // Build response content
     let content = '';
+
+    // ── 澄清模式：Agent 等待用户补充信息 ──────────────────────────────
+    if (data.status === 'awaiting_clarification') {
+      // 保存 clarify_context，下一轮发送时自动带上
+      _pendingClarifyCtx = data.clarify_context || null;
+
+      // 清除 pipeline 动画（澄清不需要完整管道提示）
+      traceContainer.remove();
+
+      // 从 clarify_context 里取快捷选项（后端生成）
+      const suggestions = data.clarify_context?.suggestions || [];
+
+      // ── 用 DOM API 构建澄清气泡，规避 innerHTML 字符串解析的一切引号/转义风险 ──
+      const bubbleEl = document.createElement('div');
+      bubbleEl.className = 'clarify-bubble';
+
+      // 图标
+      const iconEl = document.createElement('div');
+      iconEl.className = 'clarify-icon';
+      iconEl.textContent = '🤔';
+      bubbleEl.appendChild(iconEl);
+
+      // 澄清问题（Markdown）
+      const textEl = document.createElement('div');
+      textEl.className = 'clarify-text clarify-md';
+      textEl.innerHTML = renderMd(data.answer || '需要更多信息来理解您的问题');
+      bubbleEl.appendChild(textEl);
+
+      // Chips（每个都用 DOM 节点创建，textContent 赋值，dataset 赋值）
+      if (suggestions.length > 0) {
+        const chipsContainer = document.createElement('div');
+        chipsContainer.className = 'clarify-chips';
+        suggestions.forEach(function(s) {
+          const btn = document.createElement('button');
+          btn.className = 'clarify-chip';
+          btn.textContent = s;          // 直接 textContent，无 HTML 转义问题
+          btn.dataset.clarifyVal = s;   // dataset 直接赋值，无引号问题
+          btn.addEventListener('click', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            fillClarify(s);             // 闭包直接捕获 s，最可靠
+          });
+          chipsContainer.appendChild(btn);
+        });
+        bubbleEl.appendChild(chipsContainer);
+      }
+
+      // 提示文字
+      const hintEl = document.createElement('div');
+      hintEl.className = 'clarify-hint';
+      hintEl.textContent = '💡 点击选项直接发送，或在下方输入框补充后发送';
+      bubbleEl.appendChild(hintEl);
+
+      const bodyEl = document.createElement('div');
+      bodyEl.className = 'msg-body';
+      bodyEl.appendChild(bubbleEl);
+      agentMsg.appendChild(bodyEl);
+
+      // 高亮输入框，提示用户回答
+      const inputEl = document.getElementById('query-input');
+      inputEl.placeholder = '请补充说明（如：订单表、昨天、总金额）…';
+      inputEl.classList.add('clarify-waiting');
+      inputEl.focus();
+
+      messages.scrollTop = messages.scrollHeight;
+      // 先重置 loading 状态，让用户可以立即点击 chips 发送
+      isLoading = false;
+      sendBtn.disabled = false;
+
+      await addHistoryItem(text, 'clarify', agentMsg, {
+        traceId: data.trace_id, sql: '', answer: data.answer, intent: data.intent,
+      });
+
+      messages.scrollTop = messages.scrollHeight;
+      return;
+    }
+    // ── 正常流程 ──────────────────────────────────────────────────────
+
+    // 若此前处于澄清等待，现在收到正常结果，恢复输入框样式
+    const inputEl2 = document.getElementById('query-input');
+    inputEl2.placeholder = '用自然语言描述你的对账问题…';
+    inputEl2.classList.remove('clarify-waiting');
 
     if (data.sql) content += renderSQL(data.sql);
 

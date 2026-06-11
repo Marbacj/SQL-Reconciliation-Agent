@@ -16,6 +16,11 @@ from typing import List
 
 from recon_v2.infra.tracing import span
 from recon_v2.orchestration.ctx_registry import get as get_ctx
+from recon_v2.orchestration.rules import (
+    RECON_INTENTS,
+    build_recon_planner_prompt_prefix,
+    should_enter_recon,
+)
 from recon_v2.orchestration.state import GraphState
 from recon_v2.tools.schema_inspector import SchemaInfo, inspect as inspect_schema
 
@@ -56,11 +61,9 @@ _PLAN_TEMPLATES = {
     ],
 }
 
-# 需要走并行路径的意图集合（plan 节点据此决定是否调 _build_parallel_steps_with_llm）
-_PARALLEL_INTENTS = {
-    "numeric_diff", "time_window_recon", "multi_table_join", "boundary_edge",
-    "period_comparison",  # 同环比：当前周期和对比周期各跑一条 SQL，天然并行
-}
+# 需要走并行路径的意图集合 — 迁移至 rules/recon_guard.py
+# 保留内部别名以兼容本文件后续引用
+_PARALLEL_INTENTS = RECON_INTENTS
 
 
 def _get_schema_info(ctx) -> SchemaInfo:
@@ -103,7 +106,10 @@ def plan_node(state: GraphState) -> dict:
 
         # 对 numeric_diff / time_window_recon 等多表意图：LLM 有能力时生成并行步骤的具体 SQL
         # 先判断是否应该走并行路径
-        use_parallel = intent in _PARALLEL_INTENTS and ctx.mode == "plan_solve"
+        guard = should_enter_recon(query, intent)
+        use_parallel = guard.ok and ctx.mode == "plan_solve"
+        if not guard.ok and ctx.mode == "plan_solve":
+            logger.info("[PLAN] recon_guard blocked parallel path: %s", guard.reason)
 
         # 如有 LLM：由 LLM 重写更精细的 plan，schema 来自实时查询
         if ctx.llm is not None and ctx.mode == "plan_solve":
@@ -145,16 +151,19 @@ def plan_node(state: GraphState) -> dict:
                 msg = (
                     f"Query: {query}\nIntent: {intent}\n"
                     f"{schema_hint}\n"
-                    "SQLite date rules: DATE('now'), DATE('now','-N days'), "
-                    "strftime('%Y-%m',col). NO INTERVAL/CURDATE/NOW()."
+                    "Output 2-5 concise step descriptions to solve this data query task. "
+                    "Each step on a new line, no numbering needed."
                     f"{rag_hint}"
                     f"{episodic_hint}\n"
-                    "Output 2-5 concise step descriptions to solve this SQL reconciliation task. "
-                    "Each step on a new line, no numbering needed."
                 )
                 out = ctx.llm.chat(
                     messages=[
-                        {"role": "system", "content": "You decompose a SQL reconciliation task into steps."},
+                        {"role": "system", "content": (
+                            "You are a Data Agent planner. Decompose the user's data query into clear, "
+                            "executable steps. For reconciliation queries, plan comparison between two "
+                            "data sources. For analysis queries (trends, rankings, aggregations), plan "
+                            "the SQL retrieval and formatting steps."
+                        )},
                         {"role": "user", "content": msg},
                     ],
                     trace_id=ctx.trace_id,
@@ -231,11 +240,13 @@ def _build_recon_plan_with_llm(
     """
     import json as _json
 
+    # 对账判断约束文字从 rules/recon_guard.py 统一生成，保持规则中心化
+    guard_prefix = build_recon_planner_prompt_prefix(query, intent)
     prompt = (
         f"Query: {query}\nIntent: {intent}\n\n"
         f"{schema_hint}\n\n"
-        "你是一个数据对账规划器。根据查询意图，从上述表结构中找出语义最匹配的表参与对账。\n"
-        "选表原则：\n"
+        f"{guard_prefix}"
+        "选表原则（仅对账查询才需要）:\n"
         "  - 「订单金额/支付金额对比」→ 选订单表(order_amount/orders) 和结算/支付流水表(settlements/payments)\n"
         "  - 不要选统计汇总表(gmv/stats/report/summary/count)，除非查询明确提到这些表名\n"
         "  - 每张候选表必须有金额列（amount/fee/price/gmv 等）或业务 ID 列\n\n"
@@ -256,11 +267,10 @@ def _build_recon_plan_with_llm(
     try:
         out = ctx.llm.chat(
             messages=[
-                {
-                    "role": "system",
-                    "content": (
-                        "You are a data reconciliation planner. Analyze the query and output a structured "
-                        "reconciliation plan with N tables (N>=2 for recon queries). "
+                {"role": "system", "content": (
+                        "You are a Data Agent — a data reconciliation planner. "
+                        "Analyze the query and output a structured reconciliation plan "
+                        "with N tables (N>=2 for recon queries). "
                         "Return valid JSON only."
                     ),
                 },
@@ -625,13 +635,12 @@ def _build_parallel_steps_with_llm(
     try:
         out = ctx.llm.chat(
             messages=[
-                {
-                    "role": "system",
-                    "content": (
-                        "You analyze a reconciliation query and generate independent SQL for each table. "
-                        "Return a JSON array only, no explanation. "
-                        "The number of tables is determined by the query complexity."
-                    ),
+                {"role": "system", "content": (
+                    "You are a Data Agent planner. Analyze the data query and generate "
+                    "independent SQL for each required table or data source. "
+                    "Return a JSON array only, no explanation. "
+                    "The number of tables is determined by the query complexity."
+                ),
                 },
                 {"role": "user", "content": prompt},
             ],

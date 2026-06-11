@@ -105,6 +105,9 @@ class QueryRequest(BaseModel):
     db_path: Optional[str] = None
     thread_id: Optional[str] = None
     datasource: Optional[str] = None  # 数据源名称，优先于 db_path
+    # 多轮对话澄清：客户端在收到 status="awaiting_clarification" 后，
+    # 下一轮请求需把上一轮响应里的 clarify_context 原样传回
+    clarify_context: Optional[Dict[str, Any]] = None
 
 
 class LoginRequest(BaseModel):
@@ -169,26 +172,32 @@ def _build_app():
     _ui_dir = os.path.normpath(os.path.join(os.path.dirname(__file__), "..", "ui"))
     if os.path.isdir(_ui_dir):
         # 显式路由优先（必须在 mount 之前注册）
+        _NO_CACHE_HEADERS = {
+            "Cache-Control": "no-cache, no-store, must-revalidate",
+            "Pragma": "no-cache",
+            "Expires": "0",
+        }
+
         @app.get("/", include_in_schema=False)
         def _root():
             landing = os.path.join(_ui_dir, "landing.html")
             if os.path.exists(landing):
-                return FileResponse(landing)
-            return FileResponse(os.path.join(_ui_dir, "index.html"))
+                return FileResponse(landing, headers=_NO_CACHE_HEADERS)
+            return FileResponse(os.path.join(_ui_dir, "index.html"), headers=_NO_CACHE_HEADERS)
 
         # 将静态目录挂载到 /static，避免与 API 路由冲突
         # 同时注册常用 HTML 页面的顶层路由
         @app.get("/docs.html", include_in_schema=False)
         def _docs():
-            return FileResponse(os.path.join(_ui_dir, "docs.html"))
+            return FileResponse(os.path.join(_ui_dir, "docs.html"), headers=_NO_CACHE_HEADERS)
 
         @app.get("/index.html", include_in_schema=False)
         def _console():
-            return FileResponse(os.path.join(_ui_dir, "index.html"))
+            return FileResponse(os.path.join(_ui_dir, "index.html"), headers=_NO_CACHE_HEADERS)
 
         @app.get("/landing.html", include_in_schema=False)
         def _landing():
-            return FileResponse(os.path.join(_ui_dir, "landing.html"))
+            return FileResponse(os.path.join(_ui_dir, "landing.html"), headers=_NO_CACHE_HEADERS)
 
         @app.get("/favicon.svg", include_in_schema=False)
         def _favicon():
@@ -336,23 +345,28 @@ def _build_app():
             graph = build_graph()
             cfg = {"configurable": {"thread_id": req.thread_id or ctx.trace_id}}
             t0 = time.time()
-            out = graph.invoke(
-                {"query": req.query, "db_path": target_db, "ctx_id": ctx.trace_id},
-                config=cfg,
-            )
+            # 构建初始 state，若客户端携带 clarify_context 则注入（多轮澄清续接）
+            initial_state: dict = {"query": req.query, "db_path": target_db, "ctx_id": ctx.trace_id}
+            if req.clarify_context:
+                initial_state["clarify_context"] = req.clarify_context
+            out = graph.invoke(initial_state, config=cfg)
             latency = (time.time() - t0) * 1000
-            return JSONResponse(
-                {
-                    "trace_id": ctx.trace_id,
-                    "intent": out.get("intent"),
-                    "confidence": out.get("confidence"),
-                    "sql": out.get("sql"),
-                    "answer": out.get("answer"),
-                    "status": out.get("final_status"),
-                    "latency_ms": latency,
-                    "budget": ctx.budget.snapshot(),
-                }
-            )
+            resp: dict = {
+                "trace_id": ctx.trace_id,
+                "intent": out.get("intent"),
+                "confidence": out.get("confidence"),
+                "sql": out.get("sql"),
+                "answer": out.get("answer"),
+                "status": out.get("final_status"),
+                "latency_ms": latency,
+                "budget": ctx.budget.snapshot(),
+            }
+            # 若 Agent 等待用户澄清，把澄清上下文返回给客户端
+            # 客户端下一轮需将 clarify_context 原样传回
+            if out.get("final_status") == "awaiting_clarification":
+                resp["clarify_context"] = out.get("clarify_context")
+                resp["clarify_question"] = out.get("clarify_question")
+            return JSONResponse(resp)
         finally:
             ctx_registry.remove(ctx.trace_id)
 

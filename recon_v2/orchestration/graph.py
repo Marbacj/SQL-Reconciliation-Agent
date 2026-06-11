@@ -40,10 +40,11 @@ def build_graph(checkpointer: Optional[Any] = None):
     graph.set_entry_point("route")
 
     # route → clarify | plan
+    # "reject" 也走 clarify 节点，由 clarify_node 内部处理安全拒绝逻辑
     graph.add_conditional_edges(
         "route",
         route_decide,
-        {"clarify": "clarify", "plan": "plan"},
+        {"clarify": "clarify", "reject": "clarify", "plan": "plan"},
     )
 
     # clarify → END
