@@ -543,6 +543,15 @@ header {
       </svg>
       自进化机制
     </div>
+    <div class="nav-item" onclick="showDoc('observability')">
+      <svg class="nav-item-icon" viewBox="0 0 16 16" fill="none">
+        <circle cx="8" cy="8" r="3" stroke="currentColor" stroke-width="1.3"/>
+        <path d="M2 8h2M12 8h2M8 2v2M8 12v2" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>
+        <path d="M4.2 4.2l1.4 1.4M10.4 10.4l1.4 1.4M10.4 4.2l-1.4 1.4M4.2 10.4l1.4 1.4" stroke="currentColor" stroke-width="1.1" stroke-linecap="round"/>
+      </svg>
+      可观测性与评测
+      <span class="nav-badge">NEW</span>
+    </div>
   </aside>
 
   <!-- ── Content ── -->
@@ -554,7 +563,7 @@ header {
       <div class="doc-header">
         <div class="doc-tag">文档中心</div>
         <h1 class="doc-title">ReconAgent 技术文档</h1>
-        <p class="doc-desc">SQL 对账 Agent 的完整技术参考，涵盖架构设计、权限管控、RAG 检索、记忆系统、Subagent 协同与自进化机制。</p>
+        <p class="doc-desc">SQL 对账 Agent 的完整技术参考，涵盖架构设计、权限管控、RAG 检索、记忆系统、Subagent 协同、自进化机制与可观测性评测体系。</p>
       </div>
       <hr class="doc-divider">
       <div class="overview-grid">
@@ -628,6 +637,17 @@ header {
           </div>
           <div class="ov-title">自进化机制</div>
           <div class="ov-desc">错误学习、记忆健康、Skill 持续优化</div>
+        </div>
+        <div class="overview-card" onclick="showDoc('observability')">
+          <div class="ov-icon">
+            <svg width="18" height="18" viewBox="0 0 16 16" fill="none">
+              <circle cx="8" cy="8" r="3" stroke="var(--accent)" stroke-width="1.3"/>
+              <path d="M2 8h2M12 8h2M8 2v2M8 12v2" stroke="var(--accent)" stroke-width="1.3" stroke-linecap="round"/>
+              <path d="M4.2 4.2l1.4 1.4M10.4 10.4l1.4 1.4M10.4 4.2l-1.4 1.4M4.2 10.4l1.4 1.4" stroke="var(--accent)" stroke-width="1.1" stroke-linecap="round"/>
+            </svg>
+          </div>
+          <div class="ov-title">可观测性与评测</div>
+          <div class="ov-desc">Golden Set、4 维 Metric、TraceLogger、反馈闭环</div>
         </div>
       </div>
       <div class="callout">
@@ -1367,6 +1387,190 @@ flowchart TD
       </div>
     </div>
 
+    <!-- OBSERVABILITY -->
+    <div class="doc-panel" id="panel-observability">
+      <div class="doc-header">
+        <div class="doc-tag">评测 · 观测</div>
+        <h1 class="doc-title">可观测性与评测体系</h1>
+        <p class="doc-desc">从 Golden Set 离线评测到线上 TraceLogger 追踪，再到用户反馈闭环，让 Agent 表现完全可量化、可追溯、可迭代。</p>
+      </div>
+      <hr class="doc-divider">
+
+      <div class="section">
+        <h2 class="section-title">整体架构</h2>
+        <div class="mermaid-wrap">
+<pre class="mermaid">
+flowchart TB
+  subgraph EVAL["评测层 — tests/eval/"]
+    GS["Golden Set\n50+ cases"]
+    RUNNER["runner.py\n批量执行"]
+    EA["Exec-Accuracy\n执行结果比对"]
+    SEM["Semantic-Match\n语义等价判断"]
+    GS --> RUNNER --> EA & SEM
+  end
+  subgraph OB["可观测层 — TraceLogger"]
+    TRACE["JSONL + HTML\n双格式审计轨迹"]
+    RG["Range Guard\n数据合理性校验"]
+  end
+  subgraph FB["反馈闭环"]
+    FEED["POST /feedback\nthumbsup / thumbsdown"]
+    EVO["SkillReviewer\n异步分析根因"]
+    SM2["semantic.json\n规则提炼写入"]
+    FEED --> EVO --> SM2
+  end
+  RUNNER --> TRACE
+  OB --> FB
+  SM2 --> RUNNER
+  style EVAL fill:#1a2035,stroke:#c8923a
+  style OB fill:#1a2035,stroke:#3d7a55
+  style FB fill:#1a2035,stroke:#6b5acd
+</pre>
+        </div>
+      </div>
+
+      <div class="section">
+        <h2 class="section-title">Golden Set 与四维指标</h2>
+        <div class="prose"><p>基准测试覆盖 <strong>50 个案例</strong>，横跨 6 类意图，每条记录结构如下：</p></div>
+        <div class="code-block"><span class="cm">// tests/eval/golden_set.jsonl — 每行一条 case</span>
+{
+  "id": "mj-007",
+  "query": "支付和订单金额不一致的记录",
+  "intent_label": "multi_table_join",
+  "difficulty": "hard",
+  "expected_sql": "SELECT o.id, o.amount, p.amount FROM orders o JOIN payments p ...",
+  "expected_result_summary": "订单/支付金额不一致",
+  "tags": ["diff"]
+}</div>
+        <div class="doc-table-wrap">
+          <table class="doc-table">
+            <thead><tr><th>指标</th><th>含义</th><th>计算方式</th></tr></thead>
+            <tbody>
+              <tr><td><strong>Exec-Accuracy</strong></td><td>SQL 执行结果与参考一致</td><td>result_set hash 比对（含 6 种宽松策略）</td></tr>
+              <tr><td><strong>Semantic-Match</strong></td><td>自然语言答案语义等价</td><td>关键词覆盖 / LLM-as-Judge（可注入）</td></tr>
+              <tr><td><strong>Avg Latency</strong></td><td>平均执行延迟 (ms)</td><td>含 LLM + SQL 执行全链路</td></tr>
+              <tr><td><strong>P95 Latency</strong></td><td>尾部延迟</td><td>第 95 百分位，衡量稳定性</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="callout">宽松匹配策略按优先级：精确 hash → 两者均空 → 截取前 N 列 → 列顺序不同 → 主键集合一致 → 单值数值误差 &lt; 0.1%。避免等价 SQL 被误判为错误。</div>
+      </div>
+
+      <div class="section">
+        <h2 class="section-title">运行方式与质量门禁</h2>
+        <div class="code-block"><span class="cm"># 全量 50 条评测</span>
+python -m tests.eval.runner --target v2 --db data/eval_data.sqlite
+
+<span class="cm"># smoke test：只跑前 10 条</span>
+python -m tests.eval.runner --target v2 --limit 10
+
+<span class="cm"># v1 vs v2 对比</span>
+python -m tests.eval.runner --target v2 --compare v1
+
+<span class="cm"># EA &lt; 75% 时 CI 返回非零退出码，阻断部署</span>
+if agg["exec_accuracy"] &lt; 0.75:
+    sys.exit(1)</div>
+      </div>
+
+      <div class="section">
+        <h2 class="section-title">TraceLogger 事件类型</h2>
+        <div class="prose"><p>每次 Agent 执行自动生成 <code style="font-family:'DM Mono',monospace;font-size:12.5px;color:var(--accent)">trace-{session_id}.jsonl</code> 和 <code style="font-family:'DM Mono',monospace;font-size:12.5px;color:var(--accent)">trace-{session_id}.html</code>。</p></div>
+        <div class="doc-table-wrap">
+          <table class="doc-table">
+            <thead><tr><th>事件</th><th>触发时机</th><th>关键字段</th></tr></thead>
+            <tbody>
+              <tr><td><code style="font-family:'DM Mono',monospace;font-size:12px">session_start / end</code></td><td>会话开始 / 结束</td><td>agent_name, duration, total_tokens</td></tr>
+              <tr><td><code style="font-family:'DM Mono',monospace;font-size:12px">llm_request / response</code></td><td>LLM 调用前后</td><td>model, messages, usage.total_tokens</td></tr>
+              <tr><td><code style="font-family:'DM Mono',monospace;font-size:12px">tool_call / result</code></td><td>SQL 执行前后</td><td>sql, db_path, rows_count, duration_ms</td></tr>
+              <tr><td><code style="font-family:'DM Mono',monospace;font-size:12px">range_guard_triggered</code></td><td>合理性校验拦截</td><td>check_type, value, action</td></tr>
+              <tr><td><code style="font-family:'DM Mono',monospace;font-size:12px">circuit_breaker</code></td><td>熔断器触发</td><td>tool_name, state</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="section">
+        <h2 class="section-title">Range Guard — 数据合理性校验</h2>
+        <div class="prose"><p>在 <code style="font-family:'DM Mono',monospace;font-size:12.5px;color:var(--accent)">observe.py</code> 节点内置四类断言，拦截"SQL 语法正确但业务语义异常"的结果：</p></div>
+        <div class="card-grid">
+          <div class="mini-card"><div class="mini-card-title">金额负值检测</div><div class="mini-card-desc">总金额 &lt; 0 → 告警用户，可能是 JOIN 方向错误</div></div>
+          <div class="mini-card"><div class="mini-card-title">比率超 100%</div><div class="mini-card-desc">退款率 / 转化率 &gt; 1.0 → 分母分子可能混淆</div></div>
+          <div class="mini-card"><div class="mini-card-title">COUNT 爆炸</div><div class="mini-card-desc">COUNT &gt; 百万 → 通常是笛卡尔积 JOIN 未加条件</div></div>
+          <div class="mini-card"><div class="mini-card-title">对账空结果</div><div class="mini-card-desc">对账查询返回空集 → 时间窗口设置可能有误</div></div>
+        </div>
+      </div>
+
+      <div class="section">
+        <h2 class="section-title">线上取 Query 的三条路径</h2>
+        <div class="doc-table-wrap">
+          <table class="doc-table">
+            <thead><tr><th>路径</th><th>数据源</th><th>特点</th><th>适用场景</th></tr></thead>
+            <tbody>
+              <tr><td>路径 1</td><td>sessions.sqlite messages 字段</td><td>全量，当下可用</td><td>普通问题采样</td></tr>
+              <tr><td>路径 2</td><td>episodic.json (outcome=0)</td><td>带质量标签，差评 case</td><td>最高价值改进样本</td></tr>
+              <tr><td>路径 3</td><td>query_log 表（建议落地）</td><td>全量 + status 字段，可按错误筛选</td><td>系统性 Golden Set 扩充</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="code-block"><span class="cm"># 从 episodic.json 导出差评 case（可直接追加到 golden_set.jsonl）</span>
+python - &lt;&lt; 'EOF'
+import json, pathlib
+cases = json.loads(pathlib.Path("memory_store/episodic.json").read_text())
+bad = [c for c in cases if c.get("outcome", 1) == 0]
+for c in bad:
+    print(json.dumps({
+        "id": f"online-{c['trace_id'][:8]}",
+        "query": c["query"],
+        "intent_label": c.get("intent", "unknown"),
+        "difficulty": "hard",
+        "expected_sql": c.get("sql", ""),  # 需人工修正
+        "expected_result_summary": "待标注",
+        "tags": ["online_fail"]
+    }))
+EOF</div>
+      </div>
+
+      <div class="section">
+        <h2 class="section-title">反馈闭环</h2>
+        <div class="mermaid-wrap">
+<pre class="mermaid">
+flowchart LR
+  FB["用户点 ❌\nPOST /feedback"] --> EP["写入 episodic.json\noutcome=0, user_flag=1"]
+  FB --> REV["异步 SkillReviewer\n分析失败根因"]
+  REV --> SM["提炼语义规则\nsemantic.json"]
+  SM --> PLAN["下次 plan 节点\n自动注入规则"]
+  style FB fill:#1e2230,stroke:#b84040,color:#e0e4f0
+  style EP fill:#1e2230,stroke:#3d4460,color:#e0e4f0
+  style REV fill:#1e2230,stroke:#6b5acd,color:#e0e4f0
+  style SM fill:#1e2230,stroke:#3d7a55,color:#e0e4f0
+  style PLAN fill:#1e2230,stroke:#3d7a55,color:#e0e4f0
+</pre>
+        </div>
+        <div class="callout ok">反馈接口返回 <code style="font-family:'DM Mono',monospace;font-size:12px">importance</code> 分（0~1），越高代表该 case 对进化越有价值；SkillReviewer 异步运行，不阻塞 API 响应。</div>
+      </div>
+
+      <div class="section">
+        <h2 class="section-title">评测迭代 SOP</h2>
+        <div class="code-block">1. 运行全量 Golden Set（50 条）
+   python -m tests.eval.runner --target v2
+
+2. 查看意图维度报告（哪类意图 EA 最低）
+   重点关注 exec_accuracy &lt; 70% 的意图类型
+
+3. 收集失败案例，按类型分组
+   语法错误 / 幻觉表名 / 语义偏差 / REJECT 误判
+
+4. 修复最高频失败类型（每轮只改一类）
+   经验值：每轮修复一类高频错误，通常提升 10~15 个百分点
+
+5. 回归全量，验证无副作用
+
+6. 从线上差评取 5~10 条补充 Golden Set
+   python scripts/export_bad_cases.py &gt;&gt; tests/eval/golden_set.jsonl
+
+7. 重复直到 EA ≥ 目标值（当前基线 84%）</div>
+      </div>
+    </div>
+
   </main>
 
   <!-- ── TOC Rail ── -->
@@ -1433,6 +1637,16 @@ const TOC_MAP = {
     { text: '四个进化维度', id: 'toc-evo-1' },
     { text: '触发时机', id: 'toc-evo-2' },
     { text: '进化边界', id: 'toc-evo-3' },
+  ],
+  observability: [
+    { text: '整体架构', id: 'toc-obs-0' },
+    { text: 'Golden Set 与四维指标', id: 'toc-obs-1' },
+    { text: '运行方式与质量门禁', id: 'toc-obs-2' },
+    { text: 'TraceLogger 事件类型', id: 'toc-obs-3' },
+    { text: 'Range Guard', id: 'toc-obs-4' },
+    { text: '线上取 Query 的三条路径', id: 'toc-obs-5' },
+    { text: '反馈闭环', id: 'toc-obs-6' },
+    { text: '评测迭代 SOP', id: 'toc-obs-7' },
   ],
 };
 

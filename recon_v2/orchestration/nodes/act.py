@@ -142,7 +142,7 @@ _SCHEMA_DESC_FALLBACK = (
 )
 
 
-def _get_schema_desc(ctx) -> str:
+def _get_schema_desc(ctx, datasource_id: Optional[str] = None) -> str:
     """实时获取 schema 描述，通过 SchemaLinker 过滤相关表，失败时降级到全量。"""
     # 优先用 plan 节点已缓存的 schema_info
     schema_info: SchemaInfo = getattr(ctx, "_schema_info", None)
@@ -165,7 +165,7 @@ def _get_schema_desc(ctx) -> str:
     # Schema Linking：从全量表中过滤出与 query 相关的 Top-K 张表
     # 若索引未就绪（冷启动）则 fallback 到全量
     query = getattr(ctx, "query", "") or ""
-    relevant_table_names = _link_relevant_tables(query, ctx.db_path)
+    relevant_table_names = _link_relevant_tables(query, ctx.db_path, datasource_id=datasource_id)
 
     if relevant_table_names:
         # 只保留相关表，其余过滤掉
@@ -189,13 +189,23 @@ def _get_schema_desc(ctx) -> str:
     return schema_info.to_prompt_str()
 
 
-def _link_relevant_tables(query: str, db_path: str) -> List[str]:
-    """调用 SchemaLinker 返回相关表名，失败返回空列表（触发全量 fallback）。"""
+def _link_relevant_tables(query: str, db_path: str, datasource_id: Optional[str] = None) -> List[str]:
+    """调用 SchemaLinker 返回相关表名，失败返回空列表（触发全量 fallback）。
+
+    若指定 datasource_id，优先使用该数据源专属的 SchemaLinker（namespace 隔离）。
+    """
     if not query:
         return []
     try:
+        # 优先使用数据源专属 linker（已完成索引时）
+        if datasource_id:
+            from recon_v2.rag.schema_indexer import get_datasource_linker
+            ds_linker = get_datasource_linker(datasource_id)
+            if ds_linker is not None:
+                return ds_linker.link(query, k=5, datasource_id=datasource_id)
+        # fallback 到默认全局 linker，传入 datasource_id 做 namespace 过滤
         linker = get_default_linker(db_path=db_path, auto_build=True)
-        return linker.link(query, k=5)
+        return linker.link(query, k=5, datasource_id=datasource_id)
     except Exception as e:
         logger.debug("SchemaLinker failed: %s", e)
         return []
@@ -221,7 +231,9 @@ def _llm_pick_tool(ctx, query: str, intent: str, plan: List[str], state: Optiona
         return None
     try:
         plan_text = "\n".join(f"  - {s}" for s in plan)
-        schema_desc = _get_schema_desc(ctx)
+        # 从 state 中获取 datasource_id 用于 Schema Linking namespace 隔离
+        _ds_id = state.get("datasource_id") if state else None
+        schema_desc = _get_schema_desc(ctx, datasource_id=_ds_id)
 
         # ---- Self-Correction 上下文 ----
         correction_hint = ""

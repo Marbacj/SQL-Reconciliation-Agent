@@ -104,7 +104,8 @@ class QueryRequest(BaseModel):
     query: str
     db_path: Optional[str] = None
     thread_id: Optional[str] = None
-    datasource: Optional[str] = None  # 数据源名称，优先于 db_path
+    datasource: Optional[str] = None  # 数据源名称，优先于 db_path（兼容旧字段）
+    datasource_id: Optional[str] = None  # 新字段：与 datasource 等效，优先使用
     # 多轮对话澄清：客户端在收到 status="awaiting_clarification" 后，
     # 下一轮请求需把上一轮响应里的 clarify_context 原样传回
     clarify_context: Optional[Dict[str, Any]] = None
@@ -294,22 +295,25 @@ def _build_app():
 
     @app.post("/query")
     def query(req: QueryRequest, tenant: TenantInfo = Depends(_get_tenant)):
-        # ── 数据源解析：datasource name > db_path > 默认 db ──
+        # ── 数据源解析：datasource_id > datasource > db_path > 默认 db ──
         from recon_v2.adapters import DataSourceRegistry, build_adapter
         from recon_v2.adapters.sqlite_adapter import SQLiteAdapter
         from recon_v2.tools.sql_runner import SQLRunnerTool
+
+        # 统一 datasource_id（兼容旧字段 datasource）
+        _ds_id = req.datasource_id or req.datasource
 
         _registry = DataSourceRegistry.get_instance()
         _adapter = None
         target_db = db_path  # fallback
 
-        if req.datasource:
+        if _ds_id:
             try:
-                _adapter = _registry.get_adapter(req.datasource)
+                _adapter = _registry.get_adapter(_ds_id)
                 # db_path 仅用于 schema_indexer，datasource 模式保留默认值
                 target_db = db_path
             except (KeyError, ValueError) as e:
-                raise HTTPException(status_code=404, detail=str(e))
+                raise HTTPException(status_code=400, detail=str(e))
         elif req.db_path:
             target_db = req.db_path
 
@@ -346,7 +350,14 @@ def _build_app():
             cfg = {"configurable": {"thread_id": req.thread_id or ctx.trace_id}}
             t0 = time.time()
             # 构建初始 state，若客户端携带 clarify_context 则注入（多轮澄清续接）
-            initial_state: dict = {"query": req.query, "db_path": target_db, "ctx_id": ctx.trace_id}
+            initial_state: dict = {
+                "query": req.query,
+                "db_path": target_db,
+                "ctx_id": ctx.trace_id,
+            }
+            # 传递 datasource_id 到 GraphState 供 Schema Linking 使用
+            if _ds_id:
+                initial_state["datasource_id"] = _ds_id
             if req.clarify_context:
                 initial_state["clarify_context"] = req.clarify_context
             out = graph.invoke(initial_state, config=cfg)
@@ -372,8 +383,10 @@ def _build_app():
 
 
     # ── 数据源管理接口 ──────────────────────────────────────────────────────
+    import asyncio as _asyncio
 
     from recon_v2.adapters import DataSourceConfig, DataSourceRegistry, build_adapter
+    from recon_v2.rag.schema_indexer import index_datasource
 
     class DataSourceCreateRequest(BaseModel):
         name: str = Field(..., description="数据源唯一名称，如 prod_mysql")
@@ -393,12 +406,15 @@ def _build_app():
     def list_datasources():
         """列出所有已注册数据源（密码脱敏）。"""
         registry = DataSourceRegistry.get_instance()
-        return {"datasources": registry.list_all(), "total": len(registry.list_all())}
+        all_ds = registry.list_all()
+        return {"datasources": all_ds, "total": len(all_ds)}
 
-    @app.post("/datasources", tags=["datasources"])
-    def create_datasource(req: DataSourceCreateRequest):
-        """注册新数据源。"""
+    @app.post("/datasources", status_code=201, tags=["datasources"])
+    async def create_datasource(req: DataSourceCreateRequest):
+        """注册新数据源，注册成功后异步触发 Schema 索引构建。"""
         registry = DataSourceRegistry.get_instance()
+        if registry.get_entry(req.name) is not None:
+            raise HTTPException(status_code=409, detail=f"数据源 '{req.name}' 已存在")
         cfg = DataSourceConfig(
             type=req.type,
             db_path=req.db_path,
@@ -413,27 +429,61 @@ def _build_app():
             description=req.description,
         )
         try:
-            # 先 ping 验证连通性（SQLite 检查文件是否存在）
-            adapter = build_adapter(cfg)
-            if hasattr(adapter, "ping"):
-                if not adapter.ping():
-                    raise HTTPException(status_code=400, detail="数据源连接测试失败，请检查连接参数")
             registry.register(req.name, cfg)
-            return {"status": "ok", "name": req.name, "type": req.type}
+            # 异步后台触发 Schema 索引
+            _asyncio.create_task(index_datasource(req.name))
+            return {"status": "registered", "id": req.name, "type": req.type}
         except (ValueError, ImportError) as e:
             raise HTTPException(status_code=400, detail=str(e))
 
-    @app.delete("/datasources/{name}", tags=["datasources"])
+    @app.delete("/datasources/{name}", status_code=204, tags=["datasources"])
     def delete_datasource(name: str):
         """删除已注册数据源。"""
         registry = DataSourceRegistry.get_instance()
         if not registry.unregister(name):
             raise HTTPException(status_code=404, detail=f"数据源 '{name}' 不存在")
-        return {"status": "ok", "name": name}
+
+    @app.get("/datasources/{name}/health", tags=["datasources"])
+    def datasource_health(name: str):
+        """探测数据源连通性，返回延迟或错误信息。"""
+        registry = DataSourceRegistry.get_instance()
+        entry = registry.get_entry(name)
+        if entry is None:
+            raise HTTPException(status_code=404, detail=f"数据源 '{name}' 不存在")
+        try:
+            adapter = build_adapter(entry.config)
+            return adapter.test_connection()
+        except Exception as e:
+            return {"status": "error", "message": str(e)}
+
+    @app.get("/datasources/{name}/status", tags=["datasources"])
+    def datasource_status(name: str):
+        """查询数据源的 Schema 索引状态。"""
+        registry = DataSourceRegistry.get_instance()
+        entry = registry.get_entry(name)
+        if entry is None:
+            raise HTTPException(status_code=404, detail=f"数据源 '{name}' 不存在")
+        return {
+            "id": name,
+            "index_status": entry.index_status,
+            "table_count": entry.table_count,
+            "index_error": entry.index_error,
+        }
+
+    @app.post("/datasources/{name}/reindex", tags=["datasources"])
+    async def reindex_datasource(name: str):
+        """手动触发指定数据源的 Schema 重新索引。"""
+        registry = DataSourceRegistry.get_instance()
+        if registry.get_entry(name) is None:
+            raise HTTPException(status_code=404, detail=f"数据源 '{name}' 不存在")
+        # 重置状态后异步触发
+        registry.update_index_status(name, "pending")
+        _asyncio.create_task(index_datasource(name))
+        return {"status": "accepted", "message": f"'{name}' 的 Schema 重新索引已触发"}
 
     @app.post("/datasources/{name}/ping", tags=["datasources"])
     def ping_datasource(name: str):
-        """测试指定数据源的连通性。"""
+        """测试指定数据源的连通性（兼容旧接口）。"""
         registry = DataSourceRegistry.get_instance()
         ok = registry.ping(name)
         return {"name": name, "reachable": ok}
