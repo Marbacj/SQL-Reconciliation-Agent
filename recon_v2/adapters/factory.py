@@ -67,6 +67,9 @@ class DataSourceEntry(BaseModel):
     name: str
     config: DataSourceConfig
     enabled: bool = True
+    index_status: str = Field("pending", description="schema 索引状态: pending | indexing | ready | failed")
+    table_count: int = Field(0, description="已索引的表数量")
+    index_error: Optional[str] = Field(None, description="索引失败时的错误信息")
 
 
 # ── 工厂函数 ─────────────────────────────────────────────────
@@ -222,9 +225,34 @@ class DataSourceRegistry:
                 "type": entry.config.type,
                 "enabled": entry.enabled,
                 "description": entry.config.description or "",
+                "index_status": entry.index_status,
+                "table_count": entry.table_count,
                 "config": cfg_dict,
             })
         return result
+
+    def update_index_status(
+        self,
+        name: str,
+        status: str,
+        table_count: int = 0,
+        error: Optional[str] = None,
+    ) -> None:
+        """更新指定数据源的索引状态（由后台索引任务调用）。"""
+        with self._write_lock:
+            if name not in self._entries:
+                return
+            self._entries[name] = self._entries[name].model_copy(update={
+                "index_status": status,
+                "table_count": table_count,
+                "index_error": error,
+            })
+            self._save()
+        logger.info("DataSourceRegistry: '%s' index_status → %s (tables=%d)", name, status, table_count)
+
+    def get_entry(self, name: str) -> Optional[DataSourceEntry]:
+        """获取完整条目（含 index_status）。"""
+        return self._entries.get(name)
 
     def ping(self, name: str) -> bool:
         """测试指定数据源连通性。"""

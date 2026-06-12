@@ -1834,36 +1834,62 @@ footer {
 
   <!-- Tab: 数据源 -->
   <div class="sp-body" id="tab-datasource">
+    <!-- 已注册数据源列表 -->
     <div class="sp-section">
-      <div class="sp-section-label">数据库连接</div>
+      <div class="sp-section-label" style="display:flex;align-items:center;justify-content:space-between">
+        <span>已注册数据源</span>
+        <button class="sp-btn" style="padding:2px 8px;font-size:11px" onclick="loadDatasourceList()">刷新</button>
+      </div>
+      <div id="dsList" style="max-height:200px;overflow-y:auto;border:1px solid var(--border);border-radius:6px;background:var(--bg-base);margin-bottom:10px">
+        <div style="padding:20px;text-align:center;color:var(--text-muted);font-size:12px">点击「刷新」加载数据源</div>
+      </div>
+    </div>
+
+    <!-- 添加新数据源表单 -->
+    <div class="sp-section">
+      <div class="sp-section-label">添加数据源</div>
+      <div class="sp-field">
+        <label class="sp-label">名称（唯一标识）</label>
+        <input class="sp-input" id="dsNewName" type="text" placeholder="my_db"/>
+      </div>
       <div class="sp-field">
         <label class="sp-label">数据库类型</label>
-        <select class="sp-select" id="cfgDbType" onchange="onDbTypeChange()">
+        <select class="sp-select" id="dsNewType" onchange="onDsTypeChange()">
           <option value="sqlite">SQLite</option>
           <option value="mysql">MySQL</option>
           <option value="postgres">PostgreSQL</option>
         </select>
       </div>
-      <div class="sp-field" id="cfgFileRow">
+      <div class="sp-field" id="dsNewFileRow">
         <label class="sp-label">数据库文件路径</label>
-        <input class="sp-input" id="cfgDbPath" type="text" placeholder="data/recon.db" value="data/recon.db"/>
+        <input class="sp-input" id="dsNewDbPath" type="text" placeholder="data/recon.db"/>
       </div>
-      <div class="sp-field" id="cfgHostRow" style="display:none">
+      <div class="sp-field" id="dsNewHostRow" style="display:none">
         <label class="sp-label">Host</label>
-        <input class="sp-input" id="cfgHost" type="text" placeholder="localhost:3306"/>
+        <input class="sp-input" id="dsNewHost" type="text" placeholder="localhost"/>
       </div>
-      <div class="sp-field" id="cfgDbNameRow" style="display:none">
+      <div class="sp-field" id="dsNewPortRow" style="display:none">
+        <label class="sp-label">Port</label>
+        <input class="sp-input" id="dsNewPort" type="number" placeholder="3306"/>
+      </div>
+      <div class="sp-field" id="dsNewDbNameRow" style="display:none">
         <label class="sp-label">数据库名</label>
-        <input class="sp-input" id="cfgDbName" type="text" placeholder="recon_db"/>
+        <input class="sp-input" id="dsNewDatabase" type="text" placeholder="recon_db"/>
       </div>
-      <div class="sp-field" id="cfgUserRow" style="display:none">
+      <div class="sp-field" id="dsNewUserRow" style="display:none">
         <label class="sp-label">用户名</label>
-        <input class="sp-input" id="cfgUser" type="text" placeholder="root"/>
+        <input class="sp-input" id="dsNewUser" type="text" placeholder="root"/>
       </div>
-      <div class="sp-field" id="cfgPwdRow" style="display:none">
+      <div class="sp-field" id="dsNewPwdRow" style="display:none">
         <label class="sp-label">密码</label>
-        <input class="sp-input" id="cfgPwd" type="password" placeholder="••••••••"/>
+        <input class="sp-input" id="dsNewPassword" type="password" placeholder="••••••••"/>
       </div>
+      <div class="sp-field">
+        <label class="sp-label">描述（可选）</label>
+        <input class="sp-input" id="dsNewDesc" type="text" placeholder="生产环境对账库"/>
+      </div>
+      <button class="sp-btn primary" style="width:100%;margin-top:8px" onclick="addDatasource()">注册数据源</button>
+      <div id="dsAddMsg" style="font-size:11.5px;margin-top:6px;min-height:16px"></div>
     </div>
 
     <div class="sp-section">
@@ -2214,6 +2240,14 @@ footer {
 
     <!-- Input -->
     <div class="input-area">
+      <!-- 数据源选择器 -->
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+        <span style="font-size:11px;color:var(--text-muted);white-space:nowrap">数据源：</span>
+        <select id="activeDatasource" style="flex:1;font-size:11.5px;padding:4px 8px;background:var(--bg-raised);border:1px solid var(--border);border-radius:6px;color:var(--text-sub);cursor:pointer" onchange="onActiveDatasourceChange()">
+          <option value="">— 默认 —</option>
+        </select>
+        <button style="font-size:11px;padding:3px 8px;background:var(--bg-raised);border:1px solid var(--border);border-radius:6px;color:var(--text-muted);cursor:pointer" onclick="loadDatasourceSelector()" title="刷新数据源列表">↻</button>
+      </div>
       <div class="input-box">
         <textarea
           id="query-input"
@@ -2534,6 +2568,142 @@ function onDbTypeChange() {
   document.getElementById('cfgDbNameRow').style.display = isSqlite ? 'none' : '';
   document.getElementById('cfgUserRow').style.display  = isSqlite ? 'none' : '';
   document.getElementById('cfgPwdRow').style.display   = isSqlite ? 'none' : '';
+}
+
+/* ─────────────────────────────────────────────
+   数据源管理
+───────────────────────────────────────────── */
+
+function onDsTypeChange() {
+  const v = document.getElementById('dsNewType').value;
+  const isSqlite = v === 'sqlite';
+  document.getElementById('dsNewFileRow').style.display  = isSqlite ? '' : 'none';
+  document.getElementById('dsNewHostRow').style.display  = isSqlite ? 'none' : '';
+  document.getElementById('dsNewPortRow').style.display  = isSqlite ? 'none' : '';
+  document.getElementById('dsNewDbNameRow').style.display = isSqlite ? 'none' : '';
+  document.getElementById('dsNewUserRow').style.display  = isSqlite ? 'none' : '';
+  document.getElementById('dsNewPwdRow').style.display   = isSqlite ? 'none' : '';
+}
+
+async function loadDatasourceList() {
+  const listEl = document.getElementById('dsList');
+  if (!listEl) return;
+  listEl.innerHTML = '<div style="padding:12px;text-align:center;color:var(--text-muted);font-size:12px">加载中…</div>';
+  try {
+    const res = await fetch(`${API_BASE}/datasources`);
+    const data = await res.json();
+    const items = data.datasources || [];
+    if (items.length === 0) {
+      listEl.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text-muted);font-size:12px">暂无数据源，请在下方添加</div>';
+      return;
+    }
+    const statusColor = { ready: 'var(--ok)', indexing: 'var(--warn)', failed: 'var(--err)', pending: 'var(--text-muted)' };
+    const statusLabel = { ready: '就绪', indexing: '索引中', failed: '失败', pending: '待索引' };
+    listEl.innerHTML = items.map(ds => `
+      <div style="display:flex;align-items:center;padding:8px 10px;border-bottom:1px solid var(--border);gap:8px">
+        <div style="flex:1;min-width:0">
+          <div style="font-size:12.5px;font-weight:500;color:var(--text-bright);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${ds.name}</div>
+          <div style="font-size:10.5px;color:var(--text-muted)">${ds.type} · ${ds.description || '无描述'}</div>
+        </div>
+        <span style="font-size:10px;color:${statusColor[ds.index_status]||'var(--text-muted)'};white-space:nowrap">${statusLabel[ds.index_status]||ds.index_status}</span>
+        ${ds.index_status==='ready' ? `<span style="font-size:10px;color:var(--text-muted)">${ds.table_count}表</span>` : ''}
+        <button onclick="checkDsHealth('${ds.name}')" style="font-size:10px;padding:2px 6px;background:var(--bg-base);border:1px solid var(--border);border-radius:4px;color:var(--text-sub);cursor:pointer" title="测试连通性">ping</button>
+        <button onclick="deleteDatasource('${ds.name}')" style="font-size:10px;padding:2px 6px;background:var(--bg-base);border:1px solid #f44;border-radius:4px;color:#f44;cursor:pointer" title="删除">删除</button>
+      </div>
+    `).join('');
+  } catch(e) {
+    listEl.innerHTML = `<div style="padding:12px;color:var(--err);font-size:12px">加载失败: ${e.message}</div>`;
+  }
+}
+
+async function addDatasource() {
+  const msg = document.getElementById('dsAddMsg');
+  const name = document.getElementById('dsNewName').value.trim();
+  const type = document.getElementById('dsNewType').value;
+  if (!name) { msg.style.color='var(--err)'; msg.textContent='请输入数据源名称'; return; }
+  const payload = { name, type };
+  if (type === 'sqlite') {
+    payload.db_path = document.getElementById('dsNewDbPath').value.trim();
+  } else {
+    const host = document.getElementById('dsNewHost').value.trim();
+    const port = document.getElementById('dsNewPort').value;
+    if (host) {
+      const [h, p] = host.includes(':') ? host.split(':') : [host, null];
+      payload.host = h;
+      payload.port = parseInt(p || port || (type==='mysql'?3306:5432));
+    }
+    payload.database = document.getElementById('dsNewDatabase').value.trim();
+    payload.user = document.getElementById('dsNewUser').value.trim();
+    payload.password = document.getElementById('dsNewPassword').value;
+  }
+  payload.description = document.getElementById('dsNewDesc').value.trim();
+  msg.style.color='var(--text-muted)'; msg.textContent='注册中…';
+  try {
+    const res = await fetch(`${API_BASE}/datasources`, {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify(payload),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || '注册失败');
+    msg.style.color='var(--ok)'; msg.textContent=`✓ "${name}" 已注册，正在后台建立 Schema 索引…`;
+    document.getElementById('dsNewName').value = '';
+    loadDatasourceList();
+    loadDatasourceSelector();
+    // 5s 后刷新状态（等待异步索引）
+    setTimeout(() => { loadDatasourceList(); loadDatasourceSelector(); }, 5000);
+  } catch(e) {
+    msg.style.color='var(--err)'; msg.textContent=`✗ ${e.message}`;
+  }
+}
+
+async function deleteDatasource(name) {
+  if (!confirm(`确定要删除数据源 "${name}" 吗？`)) return;
+  try {
+    const res = await fetch(`${API_BASE}/datasources/${encodeURIComponent(name)}`, { method: 'DELETE' });
+    if (!res.ok && res.status !== 204) {
+      const d = await res.json();
+      alert(d.detail || '删除失败');
+      return;
+    }
+    loadDatasourceList();
+    loadDatasourceSelector();
+  } catch(e) {
+    alert('删除失败: ' + e.message);
+  }
+}
+
+async function checkDsHealth(name) {
+  try {
+    const res = await fetch(`${API_BASE}/datasources/${encodeURIComponent(name)}/health`);
+    const d = await res.json();
+    if (d.status === 'ok') alert(`✓ ${name} 连接正常，延迟 ${d.latency_ms}ms`);
+    else alert(`✗ ${name} 连接失败: ${d.message}`);
+  } catch(e) {
+    alert('探测失败: ' + e.message);
+  }
+}
+
+async function loadDatasourceSelector() {
+  const sel = document.getElementById('activeDatasource');
+  if (!sel) return;
+  const current = sel.value;
+  try {
+    const res = await fetch(`${API_BASE}/datasources`);
+    const data = await res.json();
+    const items = (data.datasources || []).filter(ds => ds.index_status === 'ready');
+    sel.innerHTML = '<option value="">— 默认 —</option>' +
+      items.map(ds => `<option value="${ds.name}"${current===ds.name?' selected':''}>${ds.name} (${ds.type})</option>`).join('');
+  } catch(e) { /* 静默失败 */ }
+}
+
+function onActiveDatasourceChange() {
+  const val = document.getElementById('activeDatasource').value;
+  if (val) {
+    document.getElementById('query-input').placeholder = `向 ${val} 提问…`;
+  } else {
+    document.getElementById('query-input').placeholder = '用自然语言描述你的对账问题…';
+  }
 }
 
 async function triggerReindex() {
@@ -3462,6 +3632,11 @@ async function sendQuery() {
       query: text,
       db_path: document.getElementById('cfgDbPath')?.value?.trim() || null,
     };
+    // 传入当前选中的数据源
+    const activeDsEl = document.getElementById('activeDatasource');
+    if (activeDsEl && activeDsEl.value) {
+      reqBody.datasource_id = activeDsEl.value;
+    }
     if (_pendingClarifyCtx) {
       reqBody.clarify_context = _pendingClarifyCtx;
       _pendingClarifyCtx = null;  // 透传后立即清除，避免后续轮次误带
@@ -3771,6 +3946,9 @@ function initApp() {
 
 /* auto-focus input */
 document.getElementById('query-input').focus();
+
+/* 页面加载时初始化数据源选择器 */
+loadDatasourceSelector();
 </script>
 </body>
 </html>

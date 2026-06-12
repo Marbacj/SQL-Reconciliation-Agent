@@ -63,6 +63,42 @@ def _format_sql(sql: str) -> str:
 
 MAX_ACT_ITER = 6  # 单次 query 最多 6 次工具调用
 
+# ── Insight 生成开关 ──────────────────────────────────────────────
+# 对账类意图（找差异/找缺失）不做 Insight，其余意图均可触发
+# 用黑名单：排除对账 + 边界拒绝，其余一律允许 Insight
+_NO_INSIGHT_INTENTS = {
+    "time_window_recon", "numeric_diff", "boundary_edge",
+}
+# 超过 20 行的结果不走 LLM Insight（太多行，成本高且意义不大）
+_INSIGHT_MAX_ROWS = 20
+
+
+def _generate_insight(ctx, query: str, summary: str, intent: str) -> str:
+    """调用 LLM 为查询结果生成一句业务洞察（Insight）。
+
+    返回格式：原 summary + "\n\n💡 洞察\n{insight}"
+    若 LLM 不可用或生成失败，原样返回 summary（不影响主流程）。
+    """
+    if ctx is None or ctx.llm is None:
+        return summary
+    try:
+        prompt = (
+            f"用户问题：{query}\n\n"
+            f"查询结果摘要：\n{summary}\n\n"
+            f"请用1-2句简洁的中文，给出这份数据的核心业务洞察（不要重复数字，聚焦结论和建议）。"
+            f"格式：直接输出洞察文字，不加前缀标签。"
+        )
+        out = ctx.llm.chat(
+            messages=[{"role": "user", "content": prompt}],
+            max_tokens=120,
+        )
+        insight = getattr(out, "content", None) or (out if isinstance(out, str) else "")
+        if insight and insight.strip():
+            return f"{summary}\n\n💡 **洞察**\n{insight.strip()}"
+    except Exception as e:
+        logger.debug("Insight generation failed (non-fatal): %s", e)
+    return summary
+
 
 # ── Range Guard 规则 ─────────────────────────────────────────────────
 
@@ -187,12 +223,24 @@ def _check_range_guard(
             )
 
     # 3. COUNT 结果异常大（超过 100 万）时提示确认
-    if _COUNT_KEYWORDS.search(query) or (
-        sql and re.search(r"\bCOUNT\s*\(", sql, re.IGNORECASE)
-    ):
-        if first_value > 1_000_000:
+    # 注意：只在 SQL 明确有 COUNT() 且第一列是计数列时才触发，避免把 SUM 金额误判为行数
+    _has_count_sql = bool(sql and re.search(r"\bCOUNT\s*\(", sql, re.IGNORECASE))
+    _has_count_query = bool(_COUNT_KEYWORDS.search(query))
+    if _has_count_sql or _has_count_query:
+        # 进一步验证：首列列名是否是计数列（count/cnt/num 等），排除 SUM/AVG 作为首列的情况
+        columns = []
+        try:
+            if rows and isinstance(rows[0], dict):
+                columns = list(rows[0].keys())
+        except Exception:
+            pass
+        _first_col = (columns[0].lower() if columns else "").strip()
+        _is_count_col = bool(re.search(r"count|cnt|num|total_count|order_count", _first_col))
+        # 只有首列确认是计数列，或 SQL 里 COUNT 是第一个聚合函数时才触发警告
+        _count_is_first = bool(sql and re.match(r"\s*SELECT\s+COUNT\s*\(", sql.strip(), re.IGNORECASE))
+        if (_is_count_col or _count_is_first) and first_value > 1_000_000:
             warnings.append(
-                f"⚠️ 查询结果行数极大（{int(first_value):,}），请确认是否符合预期，可能缺少过滤条件。"
+                f"⚠️ 计数结果极大（{int(first_value):,}），请确认是否符合预期，可能缺少过滤条件。"
             )
 
     # 4. 结果为 0 但查询包含金额聚合 → 提示可能无数据或条件有误
@@ -842,8 +890,17 @@ def observe_node(state: GraphState) -> dict:
             answer = summary
             status = "ok"
 
-            # ── Range Guard：业务合理性检查（含行数过多 → retry）──
+            # ── Insight 生成（非对账类意图，结果行数合理时）──
+            intent = state.get("intent", "")
             rows = last_obs.get("rows", [])
+            if (
+                intent not in _NO_INSIGHT_INTENTS
+            ) and rows and len(rows) <= _INSIGHT_MAX_ROWS:
+                answer = _generate_insight(ctx, query, summary, intent)
+
+            # ── Range Guard：业务合理性检查（含行数过多 → retry）──
+            if not rows:
+                rows = last_obs.get("rows", [])
             row_count = last_obs.get("row_count", 0)
             intent = state.get("intent", "")
             guard_warnings, should_retry = _check_range_guard(query, sql, rows, row_count, intent)

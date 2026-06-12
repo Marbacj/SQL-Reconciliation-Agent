@@ -119,6 +119,22 @@ class MySQLAdapter:
             if conn:
                 conn.close()
 
+    def test_connection(self) -> dict:
+        """测试 MySQL 连通性，返回延迟或错误信息。"""
+        t0 = time.time()
+        conn = None
+        try:
+            conn = self._connect()
+            with conn.cursor() as cur:
+                cur.execute("SELECT 1")
+            latency = (time.time() - t0) * 1000
+            return {"status": "ok", "latency_ms": round(latency, 1)}
+        except Exception as e:
+            return {"status": "error", "message": str(e)}
+        finally:
+            if conn:
+                conn.close()
+
     def close(self) -> None:
         # 短连接模式，无持久连接需要释放
         pass

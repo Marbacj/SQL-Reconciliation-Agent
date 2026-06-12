@@ -39,3 +39,7 @@ class SQLAdapter(Protocol):
 
     def close(self) -> None:  # pragma: no cover
         ...
+
+    def test_connection(self) -> dict:  # pragma: no cover
+        """测试数据库连通性，返回 {"status": "ok", "latency_ms": float} 或 {"status": "error", "message": str}。"""
+        ...

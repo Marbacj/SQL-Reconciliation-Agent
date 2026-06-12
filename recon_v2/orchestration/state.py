@@ -19,6 +19,7 @@ class GraphState(TypedDict, total=False):
     # ---- 输入 ----
     query: str
     db_path: str
+    datasource_id: Optional[str]  # 指定查询使用的数据源（覆盖默认 db_path）
 
     # ---- 上下文索引 ----
     ctx_id: str

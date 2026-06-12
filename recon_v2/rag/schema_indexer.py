@@ -460,11 +460,14 @@ class SchemaLinker:
         self.top_k = top_k
         self.min_score = min_score
 
-    def link(self, query: str, k: Optional[int] = None) -> List[str]:
+    def link(self, query: str, k: Optional[int] = None, datasource_id: Optional[str] = None) -> List[str]:
         """返回与 query 最相关的表名列表（按相关性降序）。
 
         优先使用 Milvus（SCHEMA_STORE=milvus），失败则 fallback 到本地索引。
         若索引未就绪，返回空列表（调用方需 fallback 到全量 schema）。
+
+        Args:
+            datasource_id: 若指定，只检索该数据源下的表（namespace 过滤 `{id}::{table}`）
         """
         k = k or self.top_k
         query_vec = _embed(query)
@@ -475,6 +478,14 @@ class SchemaLinker:
         if _SCHEMA_STORE == "milvus":
             milvus_result = self._link_via_milvus(query_vec, k)
             if milvus_result is not None:
+                # 按 datasource_id 过滤 namespace
+                if datasource_id:
+                    prefix = f"{datasource_id}::"
+                    milvus_result = [
+                        name.split("::", 1)[-1] if name.startswith(prefix) else name
+                        for name in milvus_result
+                        if name.startswith(prefix) or "::" not in name
+                    ]
                 return milvus_result
             logger.debug("SchemaLinker: Milvus unavailable, falling back to local index")
 
@@ -485,15 +496,30 @@ class SchemaLinker:
 
         scores: List[Tuple[str, float]] = []
         for entry in self.indexer.index.entries:
+            # namespace 过滤：若 entry 有 datasource_id 前缀，只匹配对应的
+            entry_name = entry.table_name
+            if datasource_id:
+                prefix = f"{datasource_id}::"
+                if entry_name.startswith(prefix):
+                    display_name = entry_name[len(prefix):]
+                elif "::" in entry_name:
+                    # 属于其他数据源，跳过
+                    continue
+                else:
+                    display_name = entry_name
+            else:
+                display_name = entry_name.split("::", 1)[-1] if "::" in entry_name else entry_name
+
             score = _cosine(query_vec, entry.vector)
             if score >= self.min_score:
-                scores.append((entry.table_name, score))
+                scores.append((display_name, score))
 
         scores.sort(key=lambda x: x[1], reverse=True)
         result = [name for name, _ in scores[:k]]
         logger.debug(
-            "SchemaLinker: query=%r → top scores: %s",
+            "SchemaLinker: query=%r datasource_id=%r → top scores: %s",
             query[:50],
+            datasource_id,
             [(n, f"{s:.3f}") for n, s in scores[:k]],
         )
         return result
@@ -592,3 +618,61 @@ def rebuild_index(
     _global_indexer = indexer
     _global_linker = SchemaLinker(indexer)
     return idx
+
+
+# ── 数据源级别的异步索引任务 ──────────────────────────────
+
+# 每个 datasource_id 对应一个独立的 SchemaIndexer
+_ds_indexers: Dict[str, SchemaIndexer] = {}
+_ds_linkers: Dict[str, SchemaLinker] = {}
+_ds_lock = __import__("threading").Lock()
+
+
+def get_datasource_linker(datasource_id: str) -> Optional[SchemaLinker]:
+    """获取指定数据源的 SchemaLinker，若未就绪返回 None。"""
+    return _ds_linkers.get(datasource_id)
+
+
+async def index_datasource(datasource_id: str) -> None:
+    """后台异步任务：为指定数据源构建 Schema 索引。
+
+    注册数据源后由 API 层调用 asyncio.create_task(index_datasource(name))。
+    索引完成后更新 DataSourceRegistry 中的 index_status 和 table_count。
+    """
+    import asyncio
+    from recon_v2.adapters.factory import DataSourceRegistry, build_adapter
+
+    registry = DataSourceRegistry.get_instance()
+    registry.update_index_status(datasource_id, "indexing")
+
+    try:
+        cfg = registry.get_config(datasource_id)
+        if cfg is None:
+            raise ValueError(f"数据源 '{datasource_id}' 不存在")
+
+        adapter = build_adapter(cfg)
+        index_path = _DEFAULT_INDEX_PATH.replace(
+            "schema_index.json",
+            f"schema_index_{datasource_id}.json",
+        )
+
+        # 在线程池中执行阻塞的索引构建（避免阻塞 event loop）
+        loop = asyncio.get_event_loop()
+        indexer = SchemaIndexer(db_path=cfg.db_path or "", index_path=index_path, adapter=adapter)
+
+        idx = await loop.run_in_executor(None, indexer.build_and_save)
+
+        with _ds_lock:
+            _ds_indexers[datasource_id] = indexer
+            _ds_linkers[datasource_id] = SchemaLinker(indexer)
+
+        registry.update_index_status(datasource_id, "ready", table_count=len(idx.entries))
+        logger.info(
+            "index_datasource: '%s' ready, %d tables indexed",
+            datasource_id, len(idx.entries),
+        )
+
+    except Exception as e:
+        error_msg = str(e)
+        registry.update_index_status(datasource_id, "failed", error=error_msg)
+        logger.error("index_datasource: '%s' failed — %s", datasource_id, error_msg)

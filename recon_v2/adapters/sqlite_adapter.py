@@ -66,6 +66,17 @@ class SQLiteAdapter:
                 latency_ms=(time.time() - t0) * 1000,
             )
 
+    def test_connection(self) -> dict:
+        """测试 SQLite 文件是否可访问，执行 SELECT 1 测延迟。"""
+        t0 = time.time()
+        try:
+            with self._conn() as conn:
+                conn.execute("SELECT 1")
+            latency = (time.time() - t0) * 1000
+            return {"status": "ok", "latency_ms": round(latency, 1)}
+        except Exception as e:
+            return {"status": "error", "message": str(e)}
+
     def close(self) -> None:
         # short-conn 模式无需显式 close
         pass
