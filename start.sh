@@ -76,7 +76,9 @@ echo "  按 Ctrl+C 停止"
 echo ""
 
 # 记录 PID（后台启动时用）
-python3 -m uvicorn "$APP" \
+PYTHON="${0%/*}/venv/bin/python"
+[ -x "$PYTHON" ] || PYTHON=python3
+"$PYTHON" -m uvicorn "$APP" \
   --host 0.0.0.0 \
   --port "$PORT" \
   --reload \
