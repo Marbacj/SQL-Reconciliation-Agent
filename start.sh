@@ -89,10 +89,22 @@ echo ""
 # 记录 PID（后台启动时用）
 PYTHON="${0%/*}/venv/bin/python"
 [ -x "$PYTHON" ] || PYTHON=python3
+
+# --reload 与 Milvus Lite (gRPC+fcntl) 不兼容：
+#   reloader 父进程 import app → 初始化 Milvus → 获取 fcntl 锁
+#   fork 出 worker 子进程 → 再次初始化 Milvus → 锁冲突崩溃
+# 默认不加 --reload；开发热重载用 ./start.sh dev
+if [[ "${1:-start}" == "dev" ]]; then
+  yellow "开发模式（热重载，仅监听源码目录）"
+  RELOAD_FLAGS="--reload --reload-dir apps --reload-dir recon_v2"
+else
+  RELOAD_FLAGS=""
+fi
+
 "$PYTHON" -m uvicorn "$APP" \
   --host 0.0.0.0 \
   --port "$PORT" \
-  --reload \
+  $RELOAD_FLAGS \
   --log-level info &
 
 SERVER_PID=$!
