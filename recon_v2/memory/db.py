@@ -71,15 +71,19 @@ CREATE TABLE IF NOT EXISTS discrepancy_pattern (
     created_at      TEXT NOT NULL DEFAULT (strftime('%Y-%m-%d %H:%M:%S','now'))
 );
 
--- 迁移：为旧库补列（已存在时 IGNORE）
-CREATE INDEX IF NOT EXISTS idx_episodic_schema_version ON episodic_case(schema_version);
 CREATE INDEX IF NOT EXISTS idx_skill_confidence ON skill(confidence DESC);
 CREATE INDEX IF NOT EXISTS idx_discrepancy_freq ON discrepancy_pattern(frequency DESC);
 """
 
+# 列迁移：为旧库补列（列不存在时才执行，已存在时 OperationalError 被吞掉）
 _MIGRATIONS = [
     "ALTER TABLE episodic_case ADD COLUMN schema_version TEXT NOT NULL DEFAULT ''",
 ]
+
+# 依赖迁移列的索引必须在 migrations 之后才能建
+_POST_MIGRATION_DDL = """
+CREATE INDEX IF NOT EXISTS idx_episodic_schema_version ON episodic_case(schema_version);
+"""
 
 
 @contextmanager
@@ -95,6 +99,8 @@ def db_conn(db_path: str):
             conn.commit()
         except sqlite3.OperationalError:
             pass  # column already exists
+    # 建依赖新列的索引（必须在 migration 之后）
+    conn.executescript(_POST_MIGRATION_DDL)
     try:
         yield conn
         conn.commit()
