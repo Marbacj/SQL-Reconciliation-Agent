@@ -169,12 +169,16 @@ def evaluate_and_persist(
     answer: str,
     success: bool,
     llm=None,
+    schema_version: str = "",
 ) -> dict:
     """主入口：reflect_node → submit_skill_review → 这里。
 
     只有「成功」case 才会被尝试提炼为 skill。
     失败 case 写到 episodic 用于诊断，不入 skill。
     """
+    from recon_v2.memory.store import get_schema_hash
+    sv = schema_version or get_schema_hash(getattr(memory, "db_path", ""))
+
     # 1) 先写 episodic（user_flag=0，importance 由 query 新颖度决定）
     importance_info = memory.write(
         trace_id=trace_id,
@@ -184,6 +188,7 @@ def evaluate_and_persist(
         answer=answer,
         outcome=1 if success else 0,
         user_flag=0,
+        schema_version=sv,
     )
 
     if not success or not sql or sql.upper() in {"REJECT", "CLARIFY"}:
@@ -215,7 +220,7 @@ def evaluate_and_persist(
     with db_conn(memory.db_path) as conn:
         from recon_v2.memory.store import _embed, _serialize
 
-        conn.execute(
+        cur = conn.execute(
             """
             INSERT INTO skill
               (name, description, body, intent, confidence,
@@ -233,5 +238,6 @@ def evaluate_and_persist(
                 now,
             ),
         )
+        skill_id = cur.lastrowid
 
-    return {"skill_added": True, "reason": reason, **importance_info}
+    return {"skill_added": True, "skill_id": skill_id, "reason": reason, **importance_info}

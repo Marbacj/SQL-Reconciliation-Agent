@@ -282,7 +282,15 @@ def route_node(state: GraphState) -> dict:
     clarify_ctx = state.get("clarify_context")
     if clarify_ctx and isinstance(clarify_ctx, dict):
         original_query = clarify_ctx.get("original_query", "")
-        if original_query and original_query != query:
+        suggestions = clarify_ctx.get("suggestions", [])
+        if query in suggestions:
+            # User clicked a suggestion → treat as a fresh standalone query, don't merge
+            logger.info(
+                "[ROUTE] suggestion selected (turn=%d), using as fresh query: '%s'",
+                clarify_ctx.get("turn", 1),
+                query[:80],
+            )
+        elif original_query and original_query != query:
             merged_query = f"{original_query}。（补充说明：{query}）"
             logger.info(
                 "[ROUTE] clarify_context detected (turn=%d), merged query: %s",
@@ -371,6 +379,15 @@ def route_decide(state: GraphState) -> str:
 
     if intent == "boundary_edge":
         return "reject"
+
+    # Break infinite clarification loops: after 3 turns force a plan attempt
+    clarify_ctx = state.get("clarify_context")
+    if clarify_ctx and isinstance(clarify_ctx, dict):
+        if clarify_ctx.get("turn", 0) >= 3 and intent != "boundary_edge":
+            logger.info(
+                "[ROUTE] clarify turn=%d >= 3, forcing plan", clarify_ctx.get("turn")
+            )
+            return "plan"
 
     if conf < 0.45:
         return "clarify"
