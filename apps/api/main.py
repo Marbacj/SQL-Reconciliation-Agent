@@ -317,7 +317,7 @@ def _build_app():
         elif req.db_path:
             target_db = req.db_path
 
-        ctx = AgentContext(query=req.query, db_path=target_db)
+        ctx = AgentContext(query=req.query, db_path=target_db, tenant_id=tenant.tenant_id, datasource_id=_ds_id or None)
         # 若指定了外部 adapter，覆盖默认 sql_runner
         if _adapter:
             _runner = SQLRunnerTool(adapter=_adapter)
