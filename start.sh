@@ -41,9 +41,14 @@ stop_server() {
     sleep 1
   fi
 
-  # 清除 Milvus Lite 孤立锁（进程死掉后 LOCK 文件不会自动删除）
+  # 杀掉持有 Milvus Lite fcntl 锁的进程（删文件不够，必须杀进程）
   find ./data -name "LOCK" -type f 2>/dev/null | while read lf; do
-    yellow "清除孤立 Milvus 锁: $lf"
+    LOCK_PIDS=$(lsof -t "$lf" 2>/dev/null || true)
+    if [[ -n "$LOCK_PIDS" ]]; then
+      yellow "清除持有 Milvus 锁的进程: $LOCK_PIDS ($lf)"
+      echo "$LOCK_PIDS" | xargs kill -9 2>/dev/null || true
+      sleep 1
+    fi
     rm -f "$lf"
   done
 }
