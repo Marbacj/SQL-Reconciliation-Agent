@@ -37,9 +37,15 @@ stop_server() {
   PIDS=$(lsof -ti :$PORT 2>/dev/null || true)
   if [[ -n "$PIDS" ]]; then
     yellow "清理占用 :$PORT 的进程: $PIDS"
-    echo "$PIDS" | xargs kill 2>/dev/null || true
+    echo "$PIDS" | xargs kill -9 2>/dev/null || true
     sleep 1
   fi
+
+  # 清除 Milvus Lite 孤立锁（进程死掉后 LOCK 文件不会自动删除）
+  find ./data -name "LOCK" -type f 2>/dev/null | while read lf; do
+    yellow "清除孤立 Milvus 锁: $lf"
+    rm -f "$lf"
+  done
 }
 
 # ── 加载 .env ──
