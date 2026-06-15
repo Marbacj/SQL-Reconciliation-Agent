@@ -275,8 +275,11 @@ def _llm_pick_tool(ctx, query: str, intent: str, plan: List[str], state: Optiona
             try:
                 rag_docs = ctx.rag.search(query, k=2)
                 if rag_docs:
+                    source_ids = [getattr(d, "doc_id", "") for d in rag_docs if getattr(d, "doc_id", "")]
+                    # 存入 ctx.extra 供 act_node 收集到 state.rag_sources
+                    ctx.extra["_last_rag_sources"] = source_ids
                     rag_hint = "\nKnowledge base hints (use as reference, NOT as direct answer):\n" + "\n".join(
-                        f"  - {d.text[:300]}" for d in rag_docs
+                        f"  - [{getattr(d, 'doc_id', '')}] {d.text[:300]}" for d in rag_docs
                     )
             except Exception:
                 pass
@@ -288,6 +291,7 @@ def _llm_pick_tool(ctx, query: str, intent: str, plan: List[str], state: Optiona
                 mem_result = ctx.memory.query(query, k=3, intent_filter=intent)
                 episodic = mem_result.get("episodic", [])
                 semantic = mem_result.get("semantic", [])
+                skills = mem_result.get("skills", [])
 
                 failed_cases = [c for c in episodic if c.get("outcome", 1) == 0]
                 success_cases = [c for c in episodic if c.get("outcome", 1) == 1]
@@ -308,13 +312,36 @@ def _llm_pick_tool(ctx, query: str, intent: str, plan: List[str], state: Optiona
                     hints.append("📌 Semantic rules learned from history:")
                     for r in semantic[:2]:
                         hints.append(f"  - {r['rule']}")
+                if skills:
+                    hints.append("🎯 Proven SQL patterns (high confidence, use directly if applicable):")
+                    matched_skill_ids = []
+                    for sk in skills[:3]:
+                        hints.append(f"  [skill#{sk['id']} conf={sk['confidence']:.2f}] {sk['body'][:300]}")
+                        matched_skill_ids.append(sk["id"])
+                    ctx.extra["_matched_skill_ids"] = matched_skill_ids
 
                 if hints:
                     memory_hint = "\n" + "\n".join(hints) + "\n"
-                    logger.debug("[ACT] memory_hint injected: %d failed, %d success, %d rules",
-                                 len(failed_cases), len(success_cases), len(semantic))
+                    logger.debug("[ACT] memory_hint injected: %d failed, %d success, %d rules, %d skills",
+                                 len(failed_cases), len(success_cases), len(semantic), len(skills))
             except Exception as e:
                 logger.debug("Memory query failed (non-fatal): %s", e)
+
+        # ---- Discrepancy Pattern 检索：注入已知对账差异规律 ----
+        discrepancy_hint = ""
+        if ctx.memory is not None and hasattr(ctx.memory, "query_discrepancy_patterns"):
+            try:
+                patterns = ctx.memory.query_discrepancy_patterns(query, k=3)
+                if patterns:
+                    lines = ["🔍 Known reconciliation discrepancy patterns (be aware of these):"]
+                    for p in patterns:
+                        lines.append(
+                            f"  [{p['category']}|freq={p['frequency']}] {p['pattern_text']}"
+                            f" (tables: {p['tables_involved']})"
+                        )
+                    discrepancy_hint = "\n" + "\n".join(lines) + "\n"
+            except Exception as e:
+                logger.debug("Discrepancy pattern query failed: %s", e)
 
         dialect_rules = _get_dialect_rules(ctx)
         sys_msg = (
@@ -330,6 +357,7 @@ def _llm_pick_tool(ctx, query: str, intent: str, plan: List[str], state: Optiona
             f"{dialect_rules}\n"
             f"{_SQL_PRINCIPLES}"
             f"{memory_hint}"
+            f"{discrepancy_hint}"
             f"{rag_hint}"
             f"{correction_hint}"
         )
@@ -475,10 +503,12 @@ def act_node(state: GraphState) -> dict:
         obs_dict = out.model_dump() if hasattr(out, "model_dump") else dict(out.__dict__)
         observations = [obs_dict]
 
+        rag_sources = ctx.extra.pop("_last_rag_sources", [])
         return {
             "tool_calls": tool_calls,
             "observations": observations,
             "step_counter": ctx.step_counter,
             "mode": ctx.mode,
             "retry_count": new_retry_count,
+            "rag_sources": rag_sources,
         }

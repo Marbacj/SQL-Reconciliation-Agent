@@ -20,6 +20,7 @@ CREATE TABLE IF NOT EXISTS episodic_case (
     promoted    INTEGER NOT NULL DEFAULT 0,
     archived    INTEGER NOT NULL DEFAULT 0,
     embedding_json TEXT NOT NULL DEFAULT '{}',
+    schema_version TEXT NOT NULL DEFAULT '',
     created_at  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%d %H:%M:%S','now'))
 );
 
@@ -46,7 +47,39 @@ CREATE TABLE IF NOT EXISTS semantic_rule (
     archived    INTEGER NOT NULL DEFAULT 0,
     created_at  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%d %H:%M:%S','now'))
 );
+
+CREATE TABLE IF NOT EXISTS rag_feedback (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    trace_id     TEXT NOT NULL,
+    query        TEXT NOT NULL DEFAULT '',
+    doc_ids      TEXT NOT NULL DEFAULT '[]',
+    final_status TEXT NOT NULL DEFAULT '',
+    success      INTEGER NOT NULL DEFAULT 0,
+    created_at   TEXT NOT NULL DEFAULT (strftime('%Y-%m-%d %H:%M:%S','now'))
+);
+
+CREATE TABLE IF NOT EXISTS discrepancy_pattern (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    pattern_text    TEXT NOT NULL DEFAULT '',
+    tables_involved TEXT NOT NULL DEFAULT '',
+    category        TEXT NOT NULL DEFAULT '',
+    frequency       INTEGER NOT NULL DEFAULT 1,
+    last_seen       TEXT NOT NULL DEFAULT (strftime('%Y-%m-%d %H:%M:%S','now')),
+    example_query   TEXT NOT NULL DEFAULT '',
+    embedding_json  TEXT NOT NULL DEFAULT '{}',
+    archived        INTEGER NOT NULL DEFAULT 0,
+    created_at      TEXT NOT NULL DEFAULT (strftime('%Y-%m-%d %H:%M:%S','now'))
+);
+
+-- 迁移：为旧库补列（已存在时 IGNORE）
+CREATE INDEX IF NOT EXISTS idx_episodic_schema_version ON episodic_case(schema_version);
+CREATE INDEX IF NOT EXISTS idx_skill_confidence ON skill(confidence DESC);
+CREATE INDEX IF NOT EXISTS idx_discrepancy_freq ON discrepancy_pattern(frequency DESC);
 """
+
+_MIGRATIONS = [
+    "ALTER TABLE episodic_case ADD COLUMN schema_version TEXT NOT NULL DEFAULT ''",
+]
 
 
 @contextmanager
@@ -56,6 +89,12 @@ def db_conn(db_path: str):
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode=WAL")
     conn.executescript(_DDL)
+    for migration in _MIGRATIONS:
+        try:
+            conn.execute(migration)
+            conn.commit()
+        except sqlite3.OperationalError:
+            pass  # column already exists
     try:
         yield conn
         conn.commit()

@@ -60,6 +60,10 @@ class GraphState(TypedDict, total=False):
     final_status: str  # "ok" | "awaiting_clarification" | "clarify" | "rejected" | "budget_exceeded" | "error"
     error: Optional[str]
 
+    # ---- RAG Citation ----
+    # 每次 RAG 检索命中的 doc_id 列表，operator.add 跨步骤累积
+    rag_sources: Annotated[List[str], operator.add]
+
     # ---- 计费 ----
     token_cost: int
     cost_usd: float
