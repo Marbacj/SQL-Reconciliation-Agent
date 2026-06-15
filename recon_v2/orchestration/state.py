@@ -65,5 +65,8 @@ class GraphState(TypedDict, total=False):
     rag_sources: Annotated[List[str], operator.add]
 
     # ---- 计费 ----
+    # 跨 query 会话上下文（API 层注入，最近 2 轮的 query+answer 摘要）
+    prior_context: Optional[str]
+
     token_cost: int
     cost_usd: float

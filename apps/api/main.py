@@ -97,6 +97,50 @@ def _sessions_conn():
 
 
 _ensure_sessions_db()
+
+
+def _load_prior_context(session_id: str, k: int = 2) -> Optional[str]:
+    """从 sessions.sqlite 读取指定 session 的最近 k 轮对话，返回格式化字符串。
+
+    messages 是 JSON 列表，每条格式：{role: "user"|"agent", query?: str, html: str}
+    只提取 query 文本（user 轮）和 html 中的纯文本摘要（agent 轮，截断 200 字）。
+    """
+    try:
+        import json
+        import re as _re
+        with _sessions_conn() as conn:
+            row = conn.execute(
+                "SELECT messages FROM sessions WHERE id = ?", (session_id,)
+            ).fetchone()
+        if not row:
+            return None
+        msgs = json.loads(row["messages"] or "[]")
+        # 找出最近 k 个 user+agent 对
+        turns = []
+        i = len(msgs) - 1
+        while i >= 0 and len(turns) < k:
+            msg = msgs[i]
+            role = msg.get("role", "")
+            if role == "agent":
+                # 提取 HTML 纯文本（粗略去标签）
+                html = msg.get("html", "")
+                text = _re.sub(r"<[^>]+>", " ", html)
+                text = _re.sub(r"\s+", " ", text).strip()[:300]
+                # 往前找对应的 user 消息
+                if i > 0 and msgs[i - 1].get("role") == "user":
+                    user_q = msgs[i - 1].get("query") or msgs[i - 1].get("html", "")
+                    user_q = _re.sub(r"<[^>]+>", " ", user_q).strip()[:200]
+                    turns.insert(0, f"User: {user_q}\nAgent: {text}")
+                    i -= 2
+                    continue
+            i -= 1
+
+        return "\n---\n".join(turns) if turns else None
+    except Exception as e:
+        logger.debug("_load_prior_context failed: %s", e)
+        return None
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 
 
@@ -104,11 +148,14 @@ class QueryRequest(BaseModel):
     query: str
     db_path: Optional[str] = None
     thread_id: Optional[str] = None
+    session_id: Optional[str] = None   # UI 会话 ID，用于自动注入历史上下文
     datasource: Optional[str] = None  # 数据源名称，优先于 db_path（兼容旧字段）
     datasource_id: Optional[str] = None  # 新字段：与 datasource 等效，优先使用
     # 多轮对话澄清：客户端在收到 status="awaiting_clarification" 后，
     # 下一轮请求需把上一轮响应里的 clarify_context 原样传回
     clarify_context: Optional[Dict[str, Any]] = None
+    # 覆盖自动历史注入（客户端手动传时优先）
+    prior_context: Optional[str] = None
 
 
 class LoginRequest(BaseModel):
@@ -355,11 +402,18 @@ def _build_app():
                 "db_path": target_db,
                 "ctx_id": ctx.trace_id,
             }
-            # 传递 datasource_id 到 GraphState 供 Schema Linking 使用
             if _ds_id:
                 initial_state["datasource_id"] = _ds_id
             if req.clarify_context:
                 initial_state["clarify_context"] = req.clarify_context
+
+            # ── 跨 query 会话上下文注入 ─────────────────────────────────────
+            # 优先使用客户端显式传入，否则从 sessions.sqlite 自动读取最近 2 轮
+            prior_ctx = req.prior_context
+            if not prior_ctx and req.session_id:
+                prior_ctx = _load_prior_context(req.session_id, k=2)
+            if prior_ctx:
+                initial_state["prior_context"] = prior_ctx
             out = graph.invoke(initial_state, config=cfg)
             latency = (time.time() - t0) * 1000
             resp: dict = {
