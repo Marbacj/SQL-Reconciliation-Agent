@@ -7,17 +7,15 @@
 降级策略：
   若 pymilvus 未安装，自动降级到 JSON 文件存储（与 schema_indexer 默认行为一致）。
 
-配置环境变量：
-    MILVUS_URI    : 连接地址，默认 "./data/milvus_schema.db"（Milvus Lite 本地文件）
-                   生产示例: "http://milvus-server:19530"
-    MILVUS_TOKEN  : Zilliz Cloud 等托管服务的认证 token（本地部署留空）
-    MILVUS_DIM    : 向量维度，默认 512（Bag-of-tokens 稀疏向量展开为 dense 时的维度）
+向量维度由 EMBED_BACKEND 决定（与 schema_indexer 保持一致）：
+  dashscope     → 1024 维（text-embedding-v3 真实语义向量）
+  bag_of_tokens → 512 维（hash 折叠降级向量，MILVUS_DIM 可覆盖）
 
-使用：
-    store = MilvusVectorStore()
-    store.upsert_batch(entries)          # 批量写入
-    results = store.search(query_vec, k=5)   # → [(table_name, score), ...]
-    store.drop_collection()              # 清空（重建前调用）
+配置环境变量：
+    MILVUS_URI      : 连接地址，默认 "./data/milvus_schema.db"
+    MILVUS_TOKEN    : Zilliz Cloud 认证 token（本地留空）
+    EMBED_BACKEND   : "dashscope"（默认）或 "bag_of_tokens"
+    MILVUS_DIM      : bag_of_tokens 模式下的降维维度（默认 512）
 """
 
 from __future__ import annotations
@@ -25,7 +23,7 @@ from __future__ import annotations
 import logging
 import math
 import os
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple, Union
 
 logger = logging.getLogger(__name__)
 
@@ -33,44 +31,49 @@ logger = logging.getLogger(__name__)
 _MILVUS_URI = os.getenv("MILVUS_URI", "./data/milvus_schema.db")
 _MILVUS_TOKEN = os.getenv("MILVUS_TOKEN", "")
 _COLLECTION_NAME = "schema_table_index"
+_EMBED_BACKEND = os.getenv("EMBED_BACKEND", "dashscope").lower()
 
-# Bag-of-tokens 向量 hash 到 dense 维度时使用
-# 如果换用 sentence-transformers，改为对应模型输出维度（如 768 / 1536）
-_DENSE_DIM = int(os.getenv("MILVUS_DIM", "512"))
+# 维度根据后端自动确定：dashscope=1024，bag_of_tokens=env(512)
+_DASHSCOPE_DIM = 1024
+_SPARSE_DIM = int(os.getenv("MILVUS_DIM", "512"))
+_DENSE_DIM = _DASHSCOPE_DIM if _EMBED_BACKEND == "dashscope" else _SPARSE_DIM
 
 try:
-    from pymilvus import (  # type: ignore
-        CollectionSchema,
-        DataType,
-        FieldSchema,
-        MilvusClient,
-    )
+    from pymilvus import MilvusClient  # type: ignore
     _HAS_MILVUS = True
 except ImportError:
     _HAS_MILVUS = False
     logger.info("pymilvus not installed; MilvusVectorStore will be unavailable")
 
 
-# ── 向量转换：稀疏 dict → dense list ─────────────────────
+# ── 向量归一化工具 ───────────────────────────────────────
 
-def _sparse_to_dense(sparse: Dict[str, float], dim: int = _DENSE_DIM) -> List[float]:
-    """把 Bag-of-tokens 稀疏向量 hash 折叠为固定维度 dense 向量。
+def _l2_normalize(vec: List[float]) -> List[float]:
+    norm = math.sqrt(sum(v * v for v in vec))
+    return [v / norm for v in vec] if norm > 0 else vec
 
-    原理：对每个 token 用 hash(token) % dim 确定落点，累加权重，最后 L2 归一化。
-    这是一种简单的 Random Projection 降维，相似度保持性（Johnson-Lindenstrauss）近似有效。
 
-    生产升级路径：换为 sentence-transformers.encode() 直接返回 dense embedding。
-    """
+def _sparse_to_dense(sparse: Dict[str, float], dim: int = _SPARSE_DIM) -> List[float]:
+    """Bag-of-tokens 稀疏向量 hash 折叠为固定维度 dense 向量（降级路径）。"""
     vec = [0.0] * dim
     for token, weight in sparse.items():
         idx = hash(token) % dim
         vec[idx] += weight
+    return _l2_normalize(vec)
 
-    # L2 归一化
-    norm = math.sqrt(sum(v * v for v in vec))
-    if norm > 0:
-        vec = [v / norm for v in vec]
-    return vec
+
+def _to_dense(vec: Union[List[float], Dict[str, float]], dim: int) -> List[float]:
+    """统一向量格式：dense list 直接归一化；sparse dict 先折叠再归一化。"""
+    if isinstance(vec, list):
+        # 已是 dense（dashscope 输出），维度不匹配时拒绝（说明配置与索引不符）
+        if len(vec) != dim:
+            raise ValueError(
+                f"Vector dim mismatch: got {len(vec)}, expected {dim}. "
+                f"Check EMBED_BACKEND / MILVUS_DIM consistency."
+            )
+        return _l2_normalize(vec)
+    # sparse dict → hash-fold
+    return _sparse_to_dense(vec, dim)
 
 
 # ── MilvusVectorStore ────────────────────────────────────
@@ -157,7 +160,11 @@ class MilvusVectorStore:
 
         data = []
         for entry in entries:
-            dense_vec = _sparse_to_dense(entry.vector, self.dim)
+            try:
+                dense_vec = _to_dense(entry.vector, self.dim)
+            except ValueError as e:
+                logger.warning("MilvusVectorStore: skipping entry '%s': %s", entry.table_name, e)
+                continue
             data.append({
                 "table_name": entry.table_name[:256],
                 "vector": dense_vec,
@@ -176,15 +183,20 @@ class MilvusVectorStore:
 
     def search(
         self,
-        query_sparse: Dict[str, float],
+        query_vec: Union[List[float], Dict[str, float]],
         k: int = 5,
         min_score: float = 0.05,
     ) -> List[Tuple[str, float]]:
         """向量检索，返回 [(table_name, score), ...] 按相关性降序。
 
-        query_sparse: Bag-of-tokens 向量（与 schema_indexer._embed() 输出格式一致）
+        query_vec: dense List[float]（dashscope）或 sparse Dict[str,float]（bag_of_tokens），
+                   与 schema_indexer._embed() 的输出格式一致。
         """
-        query_dense = _sparse_to_dense(query_sparse, self.dim)
+        try:
+            query_dense = _to_dense(query_vec, self.dim)
+        except ValueError as e:
+            logger.warning("MilvusVectorStore.search: vector error: %s", e)
+            return []
 
         results = self._client.search(
             collection_name=self.collection_name,

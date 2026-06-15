@@ -41,6 +41,10 @@ class AgentContext:
 
     # ---- 数据源 ----
     db_path: str = field(default_factory=lambda: os.getenv("EVAL_DB_PATH", "data/eval_data.sqlite"))
+    datasource_id: Optional[str] = None
+
+    # ---- 租户（用于跨实例重建时恢复 LLM 配置）----
+    tenant_id: str = "default"
 
     # ---- 自由扩展 ----
     extra: Dict[str, Any] = field(default_factory=dict)

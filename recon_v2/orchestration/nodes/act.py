@@ -344,15 +344,36 @@ def _llm_pick_tool(ctx, query: str, intent: str, plan: List[str], state: Optiona
                 logger.debug("Discrepancy pattern query failed: %s", e)
 
         dialect_rules = _get_dialect_rules(ctx)
+
+        # ---- 动态工具目录（只暴露 LLM 可独立提供完整参数的工具）----
+        # diff_calculator / parallel_act 由 plan_node 硬调度，LLM 无法凭空生成其 left/right 数据
+        _LLM_SELECTABLE = {"sql_runner", "rag_searcher"}
+        available_tools = [
+            t for t in ctx.tools.filter_by_intent(intent)
+            if t.name in _LLM_SELECTABLE
+        ] if ctx.tools else []
+
+        tool_catalog = "\n".join(
+            f'  - "{t.name}": {t.description}'
+            for t in available_tools
+        ) or '  - "sql_runner": Execute a SELECT SQL query against the database'
+
+        # 针对 sql_runner 的参数示例（帮助 LLM 理解格式）
+        tool_examples = (
+            'sql_runner → {"name": "sql_runner", "args": {"sql": "<SELECT ...>", "apply_limit": true}}\n'
+            'rag_searcher → {"name": "rag_searcher", "args": {"query": "<search terms>", "k": 3}}'
+        )
+
         sys_msg = (
             "You are a Data Agent — a universal enterprise data query and reconciliation assistant.\n"
             "Your capabilities:\n"
             "  - Answer any data question (trends, rankings, aggregations, comparisons)\n"
             "  - Perform reconciliation between two data sources (find missing rows, value mismatches)\n"
             "  - Support multiple SQL dialects (SQLite, MySQL, PostgreSQL)\n\n"
-            "Generate ONE tool call to solve the query.\n"
-            "Respond ONLY with JSON (no markdown, no explanation): "
-            "{\"name\": \"sql_runner\", \"args\": {\"sql\": \"<SELECT ...>\", \"apply_limit\": true}}\n"
+            "Available tools (choose the BEST one for the query):\n"
+            f"{tool_catalog}\n\n"
+            "Generate ONE tool call. Respond ONLY with JSON (no markdown, no explanation).\n"
+            f"Format examples:\n{tool_examples}\n"
             f"{schema_desc}\n"
             f"{dialect_rules}\n"
             f"{_SQL_PRINCIPLES}"
@@ -365,7 +386,7 @@ def _llm_pick_tool(ctx, query: str, intent: str, plan: List[str], state: Optiona
             f"Query: {query}\n"
             f"Intent: {intent}\n"
             f"Plan:\n{plan_text}\n\n"
-            "Generate the sql_runner call with correct SQLite syntax."
+            "Choose the best tool and generate the call JSON."
         )
         out = ctx.llm.chat(
             messages=[
@@ -377,19 +398,30 @@ def _llm_pick_tool(ctx, query: str, intent: str, plan: List[str], state: Optiona
             max_tokens=600,
         )
         ctx.budget.add_tokens(out.prompt_tokens + out.completion_tokens)
-        # 尝试解析 JSON
+        # 解析 JSON
         text = out.content.strip()
         text = re.sub(r"^```(?:json)?|```$", "", text, flags=re.MULTILINE).strip()
         result = json.loads(text)
-        # 兼容 LLM 返回 {name: sql_runner, args: {query: ...}} 的情况
-        if result.get("name") == "sql_runner":
+        tool_name = result.get("name", "")
+
+        # 验证 LLM 返回的工具名在可选范围内，防止幻觉出不存在的工具
+        if tool_name not in _LLM_SELECTABLE:
+            logger.warning(
+                "_llm_pick_tool: LLM returned unknown tool '%s', fallback to sql_runner", tool_name
+            )
+            result["name"] = "sql_runner"
+            tool_name = "sql_runner"
+
+        # sql_runner：兼容 {query: ...} 字段名 + 清洗 SQL
+        if tool_name == "sql_runner":
             args = result.get("args", {})
             if "query" in args and "sql" not in args:
                 args["sql"] = args.pop("query")
-            # 清洗 SQL 字段：剥除 markdown 代码块、多余说明文字、只保留第一条语句
             if "sql" in args:
                 args["sql"] = _clean_sql(args["sql"])
             result["args"] = args
+
+        logger.debug("_llm_pick_tool: selected tool=%s", tool_name)
         return result
     except Exception as e:
         logger.warning("LLM tool pick failed: %s", e, exc_info=True)
