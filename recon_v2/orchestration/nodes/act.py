@@ -364,6 +364,16 @@ def _llm_pick_tool(ctx, query: str, intent: str, plan: List[str], state: Optiona
             'rag_searcher → {"name": "rag_searcher", "args": {"query": "<search terms>", "k": 3}}'
         )
 
+        # ---- 会话历史上下文（来自上一轮对话，帮助 LLM 理解代词指代）----
+        prior_ctx_hint = ""
+        if state:
+            prior_ctx = state.get("prior_context", "")
+            if prior_ctx and prior_ctx.strip():
+                prior_ctx_hint = (
+                    f"\n[Conversation history — for resolving references like 'that', 'it', 'the same']:\n"
+                    f"{prior_ctx.strip()[:600]}\n"
+                )
+
         sys_msg = (
             "You are a Data Agent — a universal enterprise data query and reconciliation assistant.\n"
             "Your capabilities:\n"
@@ -377,6 +387,7 @@ def _llm_pick_tool(ctx, query: str, intent: str, plan: List[str], state: Optiona
             f"{schema_desc}\n"
             f"{dialect_rules}\n"
             f"{_SQL_PRINCIPLES}"
+            f"{prior_ctx_hint}"
             f"{memory_hint}"
             f"{discrepancy_hint}"
             f"{rag_hint}"
