@@ -176,14 +176,25 @@ def _build_few_shot_block(
         lines.append(f'  Q: {q} → {{"intent": "{intent}"}}')
 
     if episodic_cases:
-        lines.append("  # --- learned from history ---")
-        for case in episodic_cases[:5]:
-            q = case.get("query", "")
-            intent = case.get("intent", "")
-            flag = case.get("user_flag", 0)
-            if q and intent:
-                note = " [user-corrected]" if flag else ""
-                lines.append(f'  Q: {q} → {{"intent": "{intent}"}}{note}')
+        # promoted=1 案例优先（高重要性且 outcome=1 自动晋升），其次按相似度排序
+        promoted = [c for c in episodic_cases if c.get("promoted")]
+        others = [c for c in episodic_cases if not c.get("promoted")]
+        top_cases = (promoted + others)[:5]
+        if top_cases:
+            lines.append("  # --- learned from history ---")
+            for case in top_cases:
+                q = case.get("query", "")
+                intent = case.get("intent", "")
+                flag = case.get("user_flag", 0)
+                is_promoted = bool(case.get("promoted"))
+                if q and intent:
+                    if flag:
+                        note = " [user-verified]"
+                    elif is_promoted:
+                        note = " [auto-learned]"
+                    else:
+                        note = ""
+                    lines.append(f'  Q: {q} → {{"intent": "{intent}"}}{note}')
 
     if knn_hint:
         lines.append(f"\n# KNN classifier hint (based on {_KNN_MIN_SAMPLES}+ historical cases): {knn_hint}")
@@ -365,13 +376,24 @@ def route_node(state: GraphState) -> dict:
     }
 
 
-def route_decide(state: GraphState) -> str:
-    """Conditional edge：决定 route 之后去 plan 还是 clarify。
+# 不需要 Plan 节点的意图：单步 SQL，直接进 act（ReAct 模式）
+# plan_node 对这些意图只会生成单行模板步骤，是纯开销
+_SKIP_PLAN_INTENTS = frozenset({
+    "simple_query",    # 单表聚合/查询，1 条 SQL
+    "topn_ranking",    # ORDER BY LIMIT，1 条 SQL
+    "trend_analysis",  # GROUP BY 时间，1 条 SQL
+    "boundary_edge",   # 安全拒绝，0 条 SQL（clarify_node 处理）
+})
 
-    触发 clarify 的条件（满足任一即可）：
-    1. 意图为 boundary_edge → 走 reject（clarify_node 内处理）
-    2. 置信度 < 0.45 → 太不确定
-    3. query 过于模糊（无业务关键词）→ 即使置信度高也需要澄清
+
+def route_decide(state: GraphState) -> str:
+    """Conditional edge：决定 route 之后去 plan / act / clarify。
+
+    路由优先级：
+    1. boundary_edge → reject（clarify_node 内处理安全拒绝）
+    2. 置信度 < 0.45 / query 过于模糊 → clarify
+    3. 意图在 _SKIP_PLAN_INTENTS → act（跳过 plan，直接 ReAct）
+    4. 其他复杂意图 → plan（Plan & Solve）
     """
     conf = state.get("confidence", 0.0)
     intent = state.get("intent", "simple_query")
@@ -416,5 +438,10 @@ def route_decide(state: GraphState) -> str:
             len(query), query,
         )
         return "clarify"
+
+    # 单步意图不需要 Plan 节点，直接进 act（ReAct 模式，省一次 LLM 调用）
+    if intent in _SKIP_PLAN_INTENTS:
+        logger.info("[ROUTE] intent=%s → skip plan, direct to act (ReAct)", intent)
+        return "act"
 
     return "plan"

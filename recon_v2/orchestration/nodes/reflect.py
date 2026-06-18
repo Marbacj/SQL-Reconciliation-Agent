@@ -103,6 +103,32 @@ def reflect_node(state: GraphState) -> dict:
             except Exception as e:
                 logger.warning("log_retrieval_feedback failed: %s", e)
 
+        # ── Episodic Memory 自动写入（自我改进闭环）──────────────────────────
+        # 每次查询结束都落盘，outcome=1 时 importance 足够高会自动 promoted=1
+        # promoted 案例在 route_node few-shot 注入时优先使用，无需人工干预
+        if ctx.memory is not None and hasattr(ctx.memory, "write"):
+            try:
+                result = ctx.memory.write(
+                    trace_id=ctx.trace_id,
+                    query=query,
+                    intent=state.get("intent", ""),
+                    sql=sql,
+                    answer=answer,
+                    outcome=1 if success else 0,
+                )
+                if result.get("promoted"):
+                    logger.info(
+                        "reflect: case auto-promoted to few-shot pool (trace=%s intent=%s)",
+                        ctx.trace_id, state.get("intent", ""),
+                    )
+                else:
+                    logger.debug(
+                        "reflect: episodic case written (trace=%s importance=%.2f promoted=%s)",
+                        ctx.trace_id, result.get("importance", 0), result.get("promoted"),
+                    )
+            except Exception as e:
+                logger.warning("reflect: memory.write failed: %s", e)
+
         budget = ctx.budget.snapshot()
         return {
             "token_cost": budget["tokens_used"],
