@@ -2264,7 +2264,7 @@ footer {
       </div>
       <div class="input-hint">
         <span class="input-hint-text">
-          <kbd>⌘</kbd><kbd>↵</kbd> 发送 &nbsp;·&nbsp; <kbd>↑</kbd> 上一条历史
+          <kbd>↵</kbd> 发送 &nbsp;·&nbsp; <kbd>⇧</kbd><kbd>↵</kbd> 换行 &nbsp;·&nbsp; <kbd>↑</kbd> 上一条历史
         </span>
       </div>
     </div>
@@ -3200,7 +3200,7 @@ function autoResize(el) {
 }
 
 function handleKey(e) {
-  if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
+  if (e.key === 'Enter' && !e.shiftKey) {
     e.preventDefault();
     sendQuery();
     return;
