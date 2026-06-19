@@ -81,7 +81,7 @@ def _embed_query(query: str) -> Dict[str, float]:
 
 
 def _cosine(a: Dict[str, float], b: Dict[str, float]) -> float:
-    if not a or not b:
+    if not a or not b or not isinstance(b, dict) or not isinstance(a, dict):
         return 0.0
     keys = set(a.keys()) & set(b.keys())
     return sum(a[k] * b[k] for k in keys)
@@ -122,7 +122,8 @@ def _knn_classify(
             raw_emb = case.get("embedding_json", "")
             if raw_emb:
                 try:
-                    emb = json.loads(raw_emb) if isinstance(raw_emb, str) else raw_emb
+                    parsed = json.loads(raw_emb) if isinstance(raw_emb, str) else raw_emb
+                    emb = parsed if isinstance(parsed, dict) else {}
                 except Exception:
                     emb = {}
         sim = _cosine(q_emb, emb)
