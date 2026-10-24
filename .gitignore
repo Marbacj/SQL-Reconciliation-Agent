@@ -63,9 +63,16 @@ db.sqlite3-journal
 
 # SQL Reconciliation Agent - project specific
 .env
+.env.local
+.env.*.local
+# 所有运行时数据库一律不入库（含密钥 / 会话 / 用户数据的风险面）
 data/*.db
-data/sessions.sqlite
-data/recon_v2.sqlite
+data/*.sqlite
+data/*.sqlite.bak
+data/*.sqlite-*
+data/*.db-shm
+data/*.db-wal
+data/*.sqlite3
 reports/
 *.pid
 .recon_server.pid
@@ -178,6 +185,8 @@ cython_debug/
 # =============================================================================
 # Demo data (generated, not source)
 data/*.db
+data/*.sqlite
+data/*.sqlite.bak
 !data/leetcode_test.db
 !data/unified_test.db
 

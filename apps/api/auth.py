@@ -5,7 +5,8 @@
   users               — 用户/租户账户（username 即 tenant_id）
   tenant_model_config — 租户级别 LLM 配置（可覆盖全局 env）
 
-默认初始化 test 用户（用户名: test，密码: test123，角色: admin）。
+默认初始化账户的用户名、密码、角色均通过环境变量配置
+（INIT_USERNAME / INIT_PASSWORD / INIT_ROLE），源码中不内置任何默认口令。
 
 @author mabohui <mabohui@kuaishou.com>
 Created on 2026-06-04
@@ -46,15 +47,34 @@ except ImportError:
     _HAS_FASTAPI = False
 
 # ── 配置 ────────────────────────────────────────────────────────────────────
-_AUTH_DB   = os.getenv("AUTH_DB_PATH", "data/auth.sqlite")
-JWT_SECRET = os.getenv("JWT_SECRET", "recon-agent-secret-change-in-prod")
+_AUTH_DB = os.getenv("AUTH_DB_PATH", "data/auth.sqlite")
+
+
+def _env_secret(name: str, label: str) -> str:
+    """读取必须由环境变量提供的密钥，缺失时生成一次性随机值并告警。
+
+    绝不回退到硬编码常量，避免源码泄露直接导致认证被绕过。
+    """
+    value = os.getenv(name)
+    if value:
+        return value
+    generated = uuid.uuid4().hex + uuid.uuid4().hex
+    import logging
+    logging.getLogger(__name__).warning(
+        "%s 未设置，已生成临时随机值（仅本次进程有效）。"
+        "生产环境请通过环境变量显式配置 %s。", label, name,
+    )
+    return generated
+
+
+JWT_SECRET = _env_secret("JWT_SECRET", "JWT 签名密钥")
 JWT_ALGO   = "HS256"
 JWT_EXPIRE = int(os.getenv("JWT_EXPIRE_HOURS", "24")) * 3600  # seconds
 
-# 初始 test 用户（可通过环境变量覆盖）
+# 初始管理员账户（必须通过环境变量提供，不再内置默认口令）
 _INIT_USER = os.getenv("INIT_USERNAME", "test")
-_INIT_PWD  = os.getenv("INIT_PASSWORD", "test123")
 _INIT_ROLE = os.getenv("INIT_ROLE", "admin")
+_INIT_PWD  = os.getenv("INIT_PASSWORD") or _env_secret("INIT_PASSWORD", "初始管理员密码")
 
 
 # ── 数据类 ───────────────────────────────────────────────────────────────────
